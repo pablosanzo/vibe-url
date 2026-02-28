@@ -303,8 +303,8 @@
       background: var(--green);
     }
 
-    .save-btn.hidden {
-      opacity: 0;
+    .save-btn.disabled {
+      opacity: 0.3;
       pointer-events: none;
     }
 
@@ -564,12 +564,12 @@
     <div class="page active" id="page-constitution">
       <div class="page-header">
         <h1 class="page-title">Constitution</h1>
-        <p class="page-desc">Rules injected into every generation prompt. Changes take effect on the next build.</p>
+        <p class="page-desc">Rules injected into every generation prompt. Edit and click save & deploy to apply to all new builds.</p>
       </div>
       <div class="editor-wrap">
         <div class="editor-toolbar">
           <span class="editor-hint" id="editorHint"></span>
-          <button class="save-btn hidden" id="saveBtn" onclick="requestSave()">save & deploy</button>
+          <button class="save-btn disabled" id="saveBtn" onclick="requestSave()">save & deploy</button>
         </div>
         <textarea class="constitution-editor" id="constitutionEditor" spellcheck="false"></textarea>
       </div>
@@ -597,6 +597,18 @@
       <div class="modal-actions">
         <button class="modal-cancel" id="deployCancelBtn">cancel</button>
         <button class="modal-confirm" id="deployConfirmBtn">deploy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELETE CONFIRMATION -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <h2>Delete project?</h2>
+      <p>This will permanently remove <strong id="deleteSlugName"></strong> and all its files. This cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="modal-cancel" id="deleteCancelBtn">cancel</button>
+        <button class="modal-confirm" id="deleteConfirmBtn" style="background:var(--red)">delete</button>
       </div>
     </div>
   </div>
@@ -688,7 +700,7 @@
 
     function updateDirtyState() {
       const dirty = editor.value !== savedContent;
-      saveBtn.classList.toggle('hidden', !dirty);
+      saveBtn.classList.toggle('disabled', !dirty);
       editorHint.textContent = dirty ? 'unsaved changes — cmd+s to save' : '';
     }
 
@@ -773,11 +785,31 @@
       projectsGrid.innerHTML = html;
     }
 
-    async function deleteProject(slug) {
-      if (!confirm('Delete /' + slug + '? This cannot be undone.')) return;
-      await fetch('/admin/api/projects/' + slug, { method: 'DELETE' });
-      loadProjects();
+    const deleteModal = document.getElementById('deleteModal');
+    let pendingDeleteSlug = null;
+
+    function deleteProject(slug) {
+      pendingDeleteSlug = slug;
+      document.getElementById('deleteSlugName').textContent = '/' + slug;
+      deleteModal.classList.add('active');
     }
+
+    document.getElementById('deleteCancelBtn').addEventListener('click', () => {
+      deleteModal.classList.remove('active');
+      pendingDeleteSlug = null;
+    });
+
+    deleteModal.addEventListener('click', (e) => {
+      if (e.target === deleteModal) { deleteModal.classList.remove('active'); pendingDeleteSlug = null; }
+    });
+
+    document.getElementById('deleteConfirmBtn').addEventListener('click', async () => {
+      if (!pendingDeleteSlug) return;
+      deleteModal.classList.remove('active');
+      await fetch('/admin/api/projects/' + pendingDeleteSlug, { method: 'DELETE' });
+      pendingDeleteSlug = null;
+      loadProjects();
+    });
 
     // Auto-refresh projects every 30s
     setInterval(() => {
