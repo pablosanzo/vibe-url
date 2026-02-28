@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>generating... | vibe-url</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --surface: #111113;
+      --border: #1e1e22;
+      --text: #e8e8ed;
+      --text-dim: #6b6b76;
+      --accent: #ff6b2b;
+      --accent-glow: rgba(255, 107, 43, 0.15);
+      --green: #34d399;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Space Grotesk', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    /* Ambient glow behind content */
+    .glow {
+      position: fixed;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      animation: pulse 4s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); }
+      50% { opacity: 0.7; transform: translate(-50%, -50%) scale(1.1); }
+    }
+
+    .container {
+      width: 100%;
+      max-width: 640px;
+      padding: 2rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    .brand {
+      font-family: var(--sans);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .brand-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Prompt display */
+    .prompt {
+      font-family: var(--sans);
+      font-size: clamp(1.5rem, 5vw, 2.5rem);
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text);
+      margin-bottom: 2.5rem;
+      word-break: break-word;
+    }
+
+    /* Progress section */
+    .progress-bar-track {
+      width: 100%;
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 1px;
+      transition: width 0.5s ease;
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    .progress-bar-fill.indeterminate {
+      width: 30%;
+      animation: slide 1.5s ease-in-out infinite;
+    }
+
+    @keyframes slide {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+
+    /* Log terminal */
+    .terminal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      max-height: 240px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .terminal::-webkit-scrollbar { width: 4px; }
+    .terminal::-webkit-scrollbar-track { background: transparent; }
+    .terminal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .log-line {
+      font-size: 0.75rem;
+      line-height: 1.8;
+      color: var(--text-dim);
+      white-space: pre-wrap;
+      word-break: break-all;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .log-line:last-child {
+      color: var(--text);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    .spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Done state */
+    .status.done {
+      color: var(--green);
+    }
+
+    .status.done .spinner {
+      border-color: var(--green);
+      animation: none;
+    }
+
+    .status.error {
+      color: #f87171;
+    }
+
+    /* Footer hint */
+    .hint {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+
+  <div class="container">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      vibe-url
+    </div>
+
+    <h1 class="prompt" id="prompt"></h1>
+
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill indeterminate" id="progressBar"></div>
+    </div>
+
+    <div class="terminal" id="terminal">
+      <div class="log-line">connecting...</div>
+    </div>
+
+    <div class="status" id="status">
+      <div class="spinner"></div>
+      <span>generating your app</span>
+    </div>
+  </div>
+
+  <div class="hint">powered by mistral vibe</div>
+
+  <script>
+    const slug = window.location.pathname.replace(/^\//, '').replace(/\/$/, '');
+    const promptText = slug.replace(/[-_]/g, ' ');
+
+    document.getElementById('prompt').textContent = promptText;
+    document.title = `${promptText} | vibe-url`;
+
+    const terminal = document.getElementById('terminal');
+    const progressBar = document.getElementById('progressBar');
+    const status = document.getElementById('status');
+
+    function addLog(message) {
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.textContent = message;
+      terminal.appendChild(line);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function setDone() {
+      progressBar.classList.remove('indeterminate');
+      progressBar.style.width = '100%';
+      status.classList.add('done');
+      status.innerHTML = '<span>done — redirecting...</span>';
+      addLog('app ready!');
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    }
+
+    function setError(message) {
+      progressBar.classList.remove('indeterminate');
+      progressBar.style.width = '0%';
+      progressBar.style.background = '#f87171';
+      status.classList.add('error');
+      status.innerHTML = `<span>${message}</span>`;
+    }
+
+    // Connect to SSE
+    const source = new EventSource(`/api/generate/${encodeURIComponent(slug)}`);
+
+    source.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'log') {
+          addLog(data.message);
+        } else if (data.type === 'done') {
+          source.close();
+          setDone();
+        } else if (data.type === 'error') {
+          source.close();
+          setError(data.message || 'Generation failed');
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    source.onerror = () => {
+      source.close();
+      setError('Connection lost. Refresh to retry.');
+    };
+  </script>
+</body>
+</html>
