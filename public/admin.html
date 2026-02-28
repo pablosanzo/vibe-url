@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>control — vibe-url</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --surface: #111113;
+      --border: #1e1e22;
+      --text: #e8e8ed;
+      --text-dim: #6b6b76;
+      --accent: #ff6b2b;
+      --accent-glow: rgba(255, 107, 43, 0.12);
+      --green: #22c55e;
+      --red: #ef4444;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Space Grotesk', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* Noise overlay — same as main site */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ---- LOGIN ---- */
+
+    .login-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      animation: fadeUp 0.4s ease;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-box {
+      width: 380px;
+      padding: 2.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .login-logo {
+      font-family: var(--sans);
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.25rem;
+    }
+
+    .login-logo span { color: var(--accent); }
+
+    .login-sub {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      letter-spacing: 0.02em;
+      margin-bottom: 2rem;
+    }
+
+    .field {
+      margin-bottom: 1rem;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 0.4rem;
+    }
+
+    .field input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .login-btn {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.7rem;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+
+    .login-btn:hover { opacity: 0.9; }
+    .login-btn:active { transform: scale(0.97); }
+
+    .login-error {
+      margin-top: 0.75rem;
+      font-size: 0.7rem;
+      color: var(--red);
+      text-align: center;
+      display: none;
+    }
+
+    /* ---- SHELL (topbar + content) ---- */
+
+    .shell {
+      display: none;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .shell.active {
+      display: flex;
+    }
+
+    /* Topbar */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 2rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+    }
+
+    .topbar-brand {
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: -0.03em;
+    }
+
+    .topbar-brand span { color: var(--accent); }
+
+    .topbar-nav {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .nav-link {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .nav-link:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .nav-link.active {
+      color: var(--text);
+      background: var(--accent-glow);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .topbar-user {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+    }
+
+    .logout-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.35rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .logout-btn:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    /* Page content */
+    .page {
+      display: none;
+      flex: 1;
+      animation: fadeUp 0.25s ease;
+    }
+
+    .page.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .page-header {
+      padding: 2rem 2rem 0;
+    }
+
+    .page-title {
+      font-family: var(--sans);
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.3rem;
+    }
+
+    .page-desc {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+    }
+
+    /* ---- CONSTITUTION PAGE ---- */
+
+    .editor-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem 2rem 2rem;
+    }
+
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .editor-hint {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+
+    .save-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1.25rem;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+
+    .save-btn:hover { opacity: 0.9; }
+    .save-btn:active { transform: scale(0.97); }
+
+    .save-btn.saved {
+      background: var(--green);
+    }
+
+    .save-btn.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .constitution-editor {
+      flex: 1;
+      min-height: 400px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text);
+      line-height: 1.75;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .constitution-editor:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .constitution-editor::selection {
+      background: var(--accent-glow);
+    }
+
+    /* ---- CONFIRM MODAL ---- */
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      width: 440px;
+      max-width: 90vw;
+      animation: fadeUp 0.2s ease;
+    }
+
+    .modal h2 {
+      font-family: var(--sans);
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .modal p {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      margin-bottom: 0.4rem;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+
+    .modal-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.55rem 1.1rem;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .modal-cancel:hover {
+      border-color: var(--text-dim);
+      color: var(--text);
+    }
+
+    .modal-confirm {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 1.25rem;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+
+    .modal-confirm:hover { opacity: 0.9; }
+    .modal-confirm:active { transform: scale(0.97); }
+
+    /* ---- PROJECTS PAGE ---- */
+
+    .projects-wrap {
+      padding: 1.5rem 2rem 2rem;
+    }
+
+    .projects-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .project-row {
+      display: grid;
+      grid-template-columns: 1fr 150px 80px 44px;
+      align-items: center;
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+
+    .project-row:last-child {
+      border-bottom: none;
+    }
+
+    .project-row:hover {
+      background: rgba(255,255,255,0.015);
+    }
+
+    .project-row.header {
+      background: rgba(255,255,255,0.02);
+    }
+
+    .project-row.header span {
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .project-slug {
+      font-size: 0.8rem;
+      color: var(--text);
+      transition: color 0.15s;
+    }
+
+    .project-slug:hover {
+      color: var(--accent);
+    }
+
+    .project-date {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+    }
+
+    .project-visits {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .project-delete {
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      transition: all 0.15s;
+      text-align: center;
+      font-family: var(--mono);
+    }
+
+    .project-delete:hover {
+      color: var(--red);
+      border-color: rgba(239, 68, 68, 0.2);
+      background: rgba(239, 68, 68, 0.06);
+    }
+
+    .empty-state {
+      padding: 3rem;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+    }
+
+    .project-count {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      font-weight: 400;
+      margin-top: 0.75rem;
+    }
+
+    @media (max-width: 640px) {
+      .topbar { padding: 0.75rem 1rem; }
+      .topbar-left { gap: 1rem; }
+      .page-header { padding: 1.5rem 1rem 0; }
+      .editor-wrap { padding: 1rem; }
+      .projects-wrap { padding: 1rem; }
+      .project-row { grid-template-columns: 1fr 100px 60px 36px; padding: 0.6rem 0.75rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div class="login-wrap" id="loginScreen">
+    <div class="login-box">
+      <div class="login-logo">vibe<span>-</span>url</div>
+      <p class="login-sub">admin control panel</p>
+      <form id="loginForm">
+        <div class="field">
+          <label>username</label>
+          <input type="text" id="loginUser" autocomplete="username" autofocus>
+        </div>
+        <div class="field">
+          <label>password</label>
+          <input type="password" id="loginPass" autocomplete="current-password">
+        </div>
+        <button type="submit" class="login-btn">sign in</button>
+        <div class="login-error" id="loginError">invalid credentials</div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DASHBOARD SHELL -->
+  <div class="shell" id="shell">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-brand">vibe<span>-</span>url</div>
+        <nav class="topbar-nav">
+          <a class="nav-link active" data-page="constitution">constitution</a>
+          <a class="nav-link" data-page="projects">projects</a>
+        </nav>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-user" id="currentUser"></span>
+        <button class="logout-btn" id="logoutBtn">log out</button>
+      </div>
+    </div>
+
+    <!-- CONSTITUTION PAGE -->
+    <div class="page active" id="page-constitution">
+      <div class="page-header">
+        <h1 class="page-title">Constitution</h1>
+        <p class="page-desc">Rules injected into every generation prompt. Changes take effect on the next build.</p>
+      </div>
+      <div class="editor-wrap">
+        <div class="editor-toolbar">
+          <span class="editor-hint" id="editorHint"></span>
+          <button class="save-btn hidden" id="saveBtn" onclick="requestSave()">save & deploy</button>
+        </div>
+        <textarea class="constitution-editor" id="constitutionEditor" spellcheck="false"></textarea>
+      </div>
+    </div>
+
+    <!-- PROJECTS PAGE -->
+    <div class="page" id="page-projects">
+      <div class="page-header">
+        <h1 class="page-title">Projects</h1>
+        <p class="page-desc">All generated apps. Visit counts update on each page load.</p>
+      </div>
+      <div class="projects-wrap">
+        <div class="projects-grid" id="projectsGrid"></div>
+        <div class="project-count" id="projectCount"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEPLOY CONFIRMATION -->
+  <div class="modal-overlay" id="deployModal">
+    <div class="modal">
+      <h2>Deploy new constitution?</h2>
+      <p>All new projects will be generated using this updated constitution. Previously generated apps will not be affected.</p>
+      <p>A copy of the current constitution will be saved automatically before overwriting.</p>
+      <div class="modal-actions">
+        <button class="modal-cancel" id="deployCancelBtn">cancel</button>
+        <button class="modal-confirm" id="deployConfirmBtn">deploy</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Elements ---
+    const loginScreen = document.getElementById('loginScreen');
+    const shell = document.getElementById('shell');
+    const loginForm = document.getElementById('loginForm');
+    const loginError = document.getElementById('loginError');
+    const editor = document.getElementById('constitutionEditor');
+    const saveBtn = document.getElementById('saveBtn');
+    const editorHint = document.getElementById('editorHint');
+    const projectsGrid = document.getElementById('projectsGrid');
+    const projectCount = document.getElementById('projectCount');
+
+    // --- Routing ---
+    const navLinks = document.querySelectorAll('.nav-link');
+    const pages = document.querySelectorAll('.page');
+
+    function navigate(page) {
+      navLinks.forEach(l => l.classList.toggle('active', l.dataset.page === page));
+      pages.forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
+      history.replaceState(null, '', '/admin' + (page === 'constitution' ? '' : '/' + page));
+      if (page === 'projects') loadProjects();
+    }
+
+    navLinks.forEach(link => {
+      link.addEventListener('click', () => navigate(link.dataset.page));
+    });
+
+    // Detect initial page from URL
+    function getInitialPage() {
+      const p = location.pathname.replace('/admin', '').replace('/', '');
+      return p === 'projects' ? 'projects' : 'constitution';
+    }
+
+    // --- Auth ---
+    fetch('/admin/me').then(r => r.json()).then(data => {
+      if (data.user) showDashboard(data.user);
+    }).catch(() => {});
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      loginError.style.display = 'none';
+      const res = await fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('loginUser').value,
+          password: document.getElementById('loginPass').value,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showDashboard(data.user);
+      } else {
+        loginError.style.display = 'block';
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/admin/logout', { method: 'POST' });
+      shell.classList.remove('active');
+      loginScreen.style.display = 'flex';
+      document.getElementById('loginUser').value = '';
+      document.getElementById('loginPass').value = '';
+    });
+
+    function showDashboard(user) {
+      loginScreen.style.display = 'none';
+      shell.classList.add('active');
+      document.getElementById('currentUser').textContent = user;
+      navigate(getInitialPage());
+      loadConstitution();
+      loadProjects();
+    }
+
+    // --- Constitution ---
+    let savedContent = '';
+
+    async function loadConstitution() {
+      const res = await fetch('/admin/api/constitution');
+      const data = await res.json();
+      editor.value = data.content;
+      savedContent = data.content;
+      updateDirtyState();
+    }
+
+    function updateDirtyState() {
+      const dirty = editor.value !== savedContent;
+      saveBtn.classList.toggle('hidden', !dirty);
+      editorHint.textContent = dirty ? 'unsaved changes — cmd+s to save' : '';
+    }
+
+    editor.addEventListener('input', updateDirtyState);
+
+    const deployModal = document.getElementById('deployModal');
+
+    function requestSave() {
+      if (editor.value === savedContent) return;
+      deployModal.classList.add('active');
+    }
+
+    document.getElementById('deployCancelBtn').addEventListener('click', () => {
+      deployModal.classList.remove('active');
+    });
+
+    deployModal.addEventListener('click', (e) => {
+      if (e.target === deployModal) deployModal.classList.remove('active');
+    });
+
+    let saveTimeout;
+    document.getElementById('deployConfirmBtn').addEventListener('click', async () => {
+      deployModal.classList.remove('active');
+      const res = await fetch('/admin/api/constitution', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editor.value }),
+      });
+      if (res.ok) {
+        savedContent = editor.value;
+        saveBtn.textContent = 'deployed';
+        saveBtn.classList.add('saved');
+        editorHint.textContent = 'live — all new builds will use this constitution';
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+          saveBtn.textContent = 'save & deploy';
+          saveBtn.classList.remove('saved');
+          updateDirtyState();
+        }, 3000);
+      }
+    });
+
+    editor.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        requestSave();
+      }
+    });
+
+    // --- Projects ---
+    async function loadProjects() {
+      const res = await fetch('/admin/api/projects');
+      const data = await res.json();
+      const projects = data.projects;
+
+      const n = projects.length;
+      const totalVisits = projects.reduce((s, p) => s + p.visits, 0);
+      projectCount.textContent = `${n} app${n !== 1 ? 's' : ''} generated — ${totalVisits} total visit${totalVisits !== 1 ? 's' : ''}`;
+
+      if (n === 0) {
+        projectsGrid.innerHTML = '<div class="empty-state">no apps generated yet</div>';
+        return;
+      }
+
+      let html = `<div class="project-row header">
+        <span>slug</span><span>created</span><span>visits</span><span></span>
+      </div>`;
+
+      for (const p of projects) {
+        const d = new Date(p.createdAt);
+        const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+          + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+        html += `<div class="project-row">
+          <a class="project-slug" href="/${p.slug}" target="_blank">${p.slug}</a>
+          <span class="project-date">${dateStr}</span>
+          <span class="project-visits">${p.visits}</span>
+          <button class="project-delete" onclick="deleteProject('${p.slug}')" title="Delete">del</button>
+        </div>`;
+      }
+
+      projectsGrid.innerHTML = html;
+    }
+
+    async function deleteProject(slug) {
+      if (!confirm('Delete /' + slug + '? This cannot be undone.')) return;
+      await fetch('/admin/api/projects/' + slug, { method: 'DELETE' });
+      loadProjects();
+    }
+
+    // Auto-refresh projects every 30s
+    setInterval(() => {
+      if (shell.classList.contains('active')) loadProjects();
+    }, 30000);
+  </script>
+</body>
+</html>

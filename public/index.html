@@ -274,6 +274,14 @@
     const form = document.getElementById('urlForm');
     const input = document.getElementById('urlInput');
 
+    // Replace spaces with dashes as user types
+    input.addEventListener('input', () => {
+      const pos = input.selectionStart;
+      const before = input.value;
+      input.value = before.replace(/ /g, '-');
+      input.selectionStart = input.selectionEnd = pos;
+    });
+
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const raw = input.value.trim();
