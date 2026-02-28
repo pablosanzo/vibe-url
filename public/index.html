@@ -304,6 +304,16 @@
         input.focus();
       });
     });
+
+    // Handle ?improve=slug from the branding bar
+    const params = new URLSearchParams(window.location.search);
+    const improve = params.get('improve');
+    if (improve) {
+      input.value = improve;
+      input.focus();
+      // Clean URL without reload
+      history.replaceState(null, '', '/');
+    }
   </script>
 </body>
 </html>

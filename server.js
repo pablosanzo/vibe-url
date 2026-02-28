@@ -341,7 +341,11 @@ app.get('/:slug', (req, res) => {
     data.apps[slug].visits = (data.apps[slug].visits || 0) + 1;
     saveData(data);
 
-    return res.sendFile(appFile);
+    // Inject branding bar
+    let html = fs.readFileSync(appFile, 'utf-8');
+    html = html.replace('</body>', brandingBar(slug) + '</body>');
+    res.type('html').send(html);
+    return;
   }
 
   res.sendFile(path.join(__dirname, 'public', 'loading.html'));
@@ -369,6 +373,83 @@ function sanitizeSlug(raw) {
 
 function slugToPrompt(slug) {
   return slug.replace(/[-_]/g, ' ').trim();
+}
+
+function brandingBar(slug) {
+  const url = `https://vibe-url.com/${slug}`;
+  const prompt = slugToPrompt(slug);
+  const emojis = ['😯', '🤯', '😮', '😏', '😎', '🫢', '🤭', '😳', '🔥', '✨', '🪄', '💅'];
+  const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+  const shareText = encodeURIComponent(`I created an app just by typing in a URL ${emoji}\n\n${url}`);
+  const improveUrl = `/?improve=${encodeURIComponent(slug)}`;
+
+  return `
+<div id="vibe-bar" style="
+  position:fixed;top:12px;left:12px;z-index:99999;
+  font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif;font-size:13px;
+  display:flex;align-items:center;gap:6px;
+  background:rgba(10,10,11,0.92);backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,0.08);border-radius:40px;
+  padding:6px 6px 6px 16px;color:#e8e8ed;
+  box-shadow:0 4px 24px rgba(0,0,0,0.4);
+  animation:vibe-slide-up 0.4s ease;
+">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap');
+    @keyframes vibe-slide-up{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+    #vibe-bar a,#vibe-bar button{font-family:inherit;font-size:12px;font-weight:500;text-decoration:none;cursor:pointer}
+    #vibe-bar .vb-btn{display:flex;align-items:center;gap:5px;border:none;border-radius:32px;padding:7px 14px;transition:all 0.15s}
+    #vibe-bar .vb-share{background:#ff6b2b;color:#fff;position:relative}
+    #vibe-bar .vb-share:hover{opacity:0.9}
+    #vibe-bar .vb-improve{background:transparent;color:#6b6b76}
+    #vibe-bar .vb-improve:hover{color:#e8e8ed;background:rgba(255,255,255,0.06)}
+    #vibe-bar .vb-logo{font-weight:700;font-size:15px;color:#e8e8ed;margin-right:6px;text-decoration:none;position:relative}
+    #vibe-bar .vb-logo span{color:#ff6b2b}
+    #vibe-bar .vb-tooltip{
+      position:absolute;top:calc(100% + 10px);left:0;
+      background:rgba(17,17,19,0.96);backdrop-filter:blur(12px);
+      border:1px solid rgba(255,255,255,0.08);border-radius:8px;
+      padding:8px 12px;white-space:nowrap;
+      font-size:11px;font-weight:500;color:#a1a1aa;
+      box-shadow:0 8px 24px rgba(0,0,0,0.5);
+      opacity:0;pointer-events:none;transform:translateY(-4px);
+      transition:opacity 0.15s,transform 0.15s;
+    }
+    #vibe-bar .vb-logo:hover .vb-tooltip{opacity:1;transform:translateY(0)}
+    #vibe-bar .vb-dropdown{
+      display:none;position:absolute;top:calc(100% + 8px);right:0;
+      background:rgba(17,17,19,0.96);backdrop-filter:blur(12px);
+      border:1px solid rgba(255,255,255,0.08);border-radius:10px;
+      padding:4px;min-width:180px;
+      box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    }
+    #vibe-bar .vb-dropdown.open{display:block}
+    #vibe-bar .vb-dropdown a{
+      display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:7px;
+      color:#e8e8ed;font-size:12px;font-weight:500;white-space:nowrap;
+    }
+    #vibe-bar .vb-dropdown a:hover{background:rgba(255,255,255,0.06)}
+    #vibe-bar .vb-dropdown .vb-dim{color:#6b6b76}
+  </style>
+  <a class="vb-logo" href="https://vibe-url.com">vibe<span>-</span>url<span class="vb-tooltip">Type any app idea in the URL, get it built instantly</span></a>
+  <a class="vb-btn vb-improve" href="${improveUrl}">improve</a>
+  <button class="vb-btn vb-share" onclick="document.getElementById('vibe-dd').classList.toggle('open')" type="button">
+    share ▾
+    <div class="vb-dropdown" id="vibe-dd">
+      <a href="https://x.com/intent/post?text=${shareText}" target="_blank" rel="noopener">
+        <span>𝕏</span> Share on X
+      </a>
+      <a href="https://wa.me/?text=${shareText}" target="_blank" rel="noopener">
+        <span>💬</span> WhatsApp
+      </a>
+      <a href="#" onclick="event.preventDefault();event.stopPropagation();navigator.clipboard.writeText('${url}');this.textContent='Copied!';setTimeout(()=>{this.innerHTML='<span>🔗</span> Copy URL'},1500)">
+        <span>🔗</span> Copy URL
+      </a>
+    </div>
+  </button>
+</div>
+<script>document.addEventListener('click',function(e){if(!e.target.closest('#vibe-bar .vb-share'))document.getElementById('vibe-dd').classList.remove('open')})</script>
+`;
 }
 
 function extractLogMessage(msg) {
