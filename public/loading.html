@@ -361,6 +361,15 @@
     }
 
     function enqueue(data) {
+      // done/error skip the queue — redirect immediately
+      if (data.type === 'done') {
+        setDone();
+        return;
+      }
+      if (data.type === 'error') {
+        setError(data.message || 'Generation failed');
+        return;
+      }
       queue.push(data);
       processQueue();
     }
