@@ -234,32 +234,15 @@ app.put('/admin/api/constitution', requireAuth, (req, res) => {
 
 app.get('/admin/api/projects', requireAuth, (req, res) => {
   const data = loadData();
-  const projects = [];
-
-  // Read all directories in apps/
-  if (fs.existsSync(APPS_DIR)) {
-    const dirs = fs.readdirSync(APPS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory());
-
-    for (const dir of dirs) {
-      const slug = dir.name;
-      const indexPath = path.join(APPS_DIR, slug, 'index.html');
-      if (!fs.existsSync(indexPath)) continue;
-
-      const stat = fs.statSync(indexPath);
-      const appData = data.apps[slug] || {};
-
-      projects.push({
-        slug,
-        createdAt: appData.createdAt || stat.birthtime.toISOString(),
-        visits: appData.visits || 0,
-        constitutionVersion: appData.constitutionVersion || null,
-      });
-    }
-  }
-
-  // Sort by creation date, newest first
-  projects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const projects = Object.entries(data.apps || {})
+    .filter(([slug]) => fs.existsSync(path.join(APPS_DIR, slugToDir(slug), 'index.html')))
+    .map(([slug, appData]) => ({
+      slug,
+      createdAt: appData.createdAt,
+      visits: appData.visits || 0,
+      constitutionVersion: appData.constitutionVersion || null,
+    }))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   res.json({ projects });
 });
 
@@ -267,7 +250,7 @@ app.delete('/admin/api/projects/:slug', requireAuth, (req, res) => {
   const slug = sanitizeSlug(req.params.slug);
   if (!slug) return res.status(400).json({ error: 'Invalid slug' });
 
-  const appDir = path.join(APPS_DIR, slug);
+  const appDir = path.join(APPS_DIR, slugToDir(slug));
   if (fs.existsSync(appDir)) {
     fs.rmSync(appDir, { recursive: true, force: true });
   }
@@ -294,7 +277,7 @@ app.get('/api/constitution-summary', (req, res) => {
 app.get('/api/showcase', (req, res) => {
   const data = loadData();
   const projects = Object.entries(data.apps || {})
-    .filter(([slug, app]) => app.showcaseSafe === true && fs.existsSync(path.join(APPS_DIR, slug, 'index.html')))
+    .filter(([slug, app]) => app.showcaseSafe === true && fs.existsSync(path.join(APPS_DIR, slugToDir(slug), 'index.html')))
     .sort((a, b) => (b[1].createdAt || '').localeCompare(a[1].createdAt || ''))
     .slice(0, 20)
     .map(([slug, app]) => ({ slug, createdAt: app.createdAt, visits: app.visits || 0 }));
@@ -315,7 +298,7 @@ app.get('/api/generate/:slug', async (req, res) => {
     return res.status(400).json({ error: 'Invalid slug' });
   }
 
-  const appDir = path.join(APPS_DIR, slug);
+  const appDir = path.join(APPS_DIR, slugToDir(slug));
   const appFile = path.join(appDir, 'index.html');
 
   // Already built — tell client immediately
@@ -593,7 +576,7 @@ app.get('/api/generate/:slug', async (req, res) => {
       } else {
         // Keep the build log even on failure — move it before deleting the dir
         const failLogPath = path.join(appDir, '.build.log');
-        const failLogDest = path.join(APPS_DIR, `.failed-${slug}-${Date.now()}.log`);
+        const failLogDest = path.join(APPS_DIR, `.failed-${slugToDir(slug)}-${Date.now()}.log`);
         if (fs.existsSync(failLogPath)) {
           try { fs.renameSync(failLogPath, failLogDest); } catch {}
         }
@@ -618,7 +601,7 @@ app.get('/:slug', (req, res) => {
     return res.status(400).send('Invalid URL');
   }
 
-  const appFile = path.join(APPS_DIR, slug, 'index.html');
+  const appFile = path.join(APPS_DIR, slugToDir(slug), 'index.html');
 
   if (fs.existsSync(appFile)) {
     // Track visit
@@ -656,8 +639,8 @@ app.get('/:slug/{*filepath}', (req, res) => {
   }
 
   // Prevent directory traversal
-  const resolved = path.resolve(path.join(APPS_DIR, slug, subPath));
-  if (!resolved.startsWith(path.resolve(path.join(APPS_DIR, slug)))) {
+  const resolved = path.resolve(path.join(APPS_DIR, slugToDir(slug), subPath));
+  if (!resolved.startsWith(path.resolve(path.join(APPS_DIR, slugToDir(slug))))) {
     return res.status(403).send('Forbidden');
   }
 
@@ -673,6 +656,13 @@ function sanitizeSlug(raw) {
   const slug = raw.toLowerCase().replace(/[^a-z0-9\-_]/g, '');
   if (!slug || slug.length > 2000) return null;
   return slug;
+}
+
+function slugToDir(slug) {
+  // Linux max filename is 255 chars — truncate long slugs with hash suffix
+  if (slug.length <= 200) return slug;
+  const hash = crypto.createHash('sha256').update(slug).digest('hex').slice(0, 12);
+  return slug.slice(0, 187) + '-' + hash;
 }
 
 function slugToPrompt(slug) {
