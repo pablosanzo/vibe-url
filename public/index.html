@@ -521,10 +521,11 @@
       }
     });
 
-    // Load ticker with latest built apps
-    fetch('/api/latest')
+    // Load ticker with showcase-safe apps
+    fetch('/api/showcase')
       .then(r => r.json())
-      .then(({ slugs }) => {
+      .then(projects => {
+        const slugs = projects.map(p => p.slug);
         if (!slugs || slugs.length === 0) return;
         const ticker = document.getElementById('ticker');
         const tickerWrap = document.getElementById('tickerWrap');

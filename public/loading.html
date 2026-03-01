@@ -296,18 +296,19 @@
       terminal.scrollTop = terminal.scrollHeight;
     }
 
-    let estimatedDuration = 60000; // default, updated by server estimate
+    let totalEstimate = 0;   // total estimated duration in ms (research + build)
     let startTime = null;
     let progressInterval = null;
 
     function startProgress() {
-      if (progressInterval) clearInterval(progressInterval);
+      if (progressInterval) return; // already running — just let it continue
       startTime = Date.now();
       progressBar.classList.remove('indeterminate');
       progressBar.style.width = '0%';
       progressInterval = setInterval(() => {
+        if (!totalEstimate) return;
         const elapsed = Date.now() - startTime;
-        const raw = elapsed / estimatedDuration;
+        const raw = elapsed / totalEstimate;
         const pct = Math.min(88, 90 * (1 - Math.exp(-2.5 * raw)));
         progressBar.style.width = pct + '%';
       }, 200);
@@ -322,9 +323,8 @@
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'estimate') {
-            // Server sends estimate before each phase (research or build)
-            // Reset progress bar to track this phase's duration
-            estimatedDuration = data.duration * 1000;
+            // Each phase sends its estimate — accumulate into total
+            totalEstimate += data.duration * 1000;
             startProgress();
           } else if (data.type === 'phase') {
             if (data.phase === 'researching') {

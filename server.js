@@ -289,14 +289,16 @@ app.get('/api/constitution-summary', (req, res) => {
   });
 });
 
-app.get('/api/latest', (req, res) => {
+
+// Returns recent projects that are safe to showcase
+app.get('/api/showcase', (req, res) => {
   const data = loadData();
-  const slugs = Object.entries(data.apps || {})
-    .filter(([, v]) => v.createdAt)
-    .sort((a, b) => new Date(b[1].createdAt) - new Date(a[1].createdAt))
-    .slice(0, 30)
-    .map(([slug]) => slug);
-  res.json({ slugs });
+  const projects = Object.entries(data.apps || {})
+    .filter(([, app]) => app.showcaseSafe === true)
+    .sort((a, b) => (b[1].createdAt || '').localeCompare(a[1].createdAt || ''))
+    .slice(0, 20)
+    .map(([slug, app]) => ({ slug, createdAt: app.createdAt, visits: app.visits || 0 }));
+  res.json(projects);
 });
 
 // --- Landing page ---
@@ -634,19 +636,6 @@ app.get('/:slug/{*filepath}', (req, res) => {
   res.status(404).send('Not found');
 });
 
-// --- Public API ---
-
-// Returns recent projects that are safe to showcase
-app.get('/api/showcase', (req, res) => {
-  const data = loadData();
-  const projects = Object.entries(data.apps || {})
-    .filter(([, app]) => app.showcaseSafe === true)
-    .sort((a, b) => (b[1].createdAt || '').localeCompare(a[1].createdAt || ''))
-    .slice(0, 20)
-    .map(([slug, app]) => ({ slug, createdAt: app.createdAt, visits: app.visits || 0 }));
-  res.json(projects);
-});
-
 // --- Helpers ---
 
 function sanitizeSlug(raw) {
@@ -675,10 +664,9 @@ Reply with just SAFE or UNSAFE.` }],
   const answer = (result.choices[0].message.content || '').trim().toUpperCase();
   const safe = answer.startsWith('SAFE');
   const data = loadData();
-  if (data.apps[slug]) {
-    data.apps[slug].showcaseSafe = safe;
-    saveData(data);
-  }
+  if (!data.apps[slug]) data.apps[slug] = {};
+  data.apps[slug].showcaseSafe = safe;
+  saveData(data);
   console.log(`[build:${slug}] moderation: ${safe ? 'SAFE' : 'UNSAFE'}`);
 }
 
