@@ -46,6 +46,10 @@ function getMistralKey() {
 const mistralKey = getMistralKey();
 const mistral = mistralKey ? new Mistral({ apiKey: mistralKey }) : null;
 
+// Constitution summary: user-facing bullet points shown in the "read our constitution"
+// modal on the homepage. Should describe what users can expect, what's allowed/not allowed,
+// and design guarantees — NOT technical implementation details.
+// Regenerated: on constitution update (admin panel), on server startup, and daily.
 async function generateConstitutionSummary() {
   if (!mistral) {
     console.error('No Mistral API key found, skipping constitution summary generation');
@@ -55,7 +59,7 @@ async function generateConstitutionSummary() {
     const constitution = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
     const result = await mistral.chat.complete({
       model: 'mistral-small-latest',
-      messages: [{ role: 'user', content: `You are summarizing a "constitution" — a set of rules that governs how an AI generates web apps on vibe-url.com.\n\nCreate a concise summary as 5-8 bullet points for end users visiting the site. Focus on:\n- What they can expect from generated apps\n- What kinds of things are allowed and encouraged\n- What is NOT allowed (harmful content, etc.)\n- Any cool design/quality guarantees\n\nKeep it friendly, concise, and in lowercase style (matching the site's tone). Each bullet should be one short sentence. No markdown headers, just bullet points starting with •\n\nHere is the constitution:\n\n${constitution}` }],
+      messages: [{ role: 'user', content: `You are summarizing a "constitution" — a set of rules that governs how an AI generates web apps on vibe-url.com.\n\nCreate a concise summary as 5-8 bullet points for end users visiting the site. Focus on:\n- What they can expect from generated apps\n- What kinds of things are allowed and encouraged\n- What is NOT allowed (harmful content, etc.)\n- Any cool design/quality guarantees\n\nDo NOT include technical implementation details (model names, file structure, etc.) — only things a user would care about.\n\nKeep it friendly, concise, and in lowercase style (matching the site's tone). Each bullet should be one short sentence. No markdown headers, just bullet points starting with •\n\nHere is the constitution:\n\n${constitution}` }],
     });
     const summary = result.choices[0].message.content.trim();
     const data = loadData();
@@ -67,6 +71,10 @@ async function generateConstitutionSummary() {
     console.error('Failed to generate constitution summary:', err.message);
   }
 }
+
+// Regenerate constitution summary on startup and every 24 hours
+generateConstitutionSummary();
+setInterval(generateConstitutionSummary, 24 * 60 * 60 * 1000);
 
 // --- Auth ---
 
