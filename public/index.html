@@ -293,6 +293,24 @@
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
     }
 
+    .showcase-iframe-wrap {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .showcase-iframe-wrap iframe {
+      width: 1280px;
+      height: 800px;
+      border: none;
+      transform-origin: top left;
+      pointer-events: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
     .showcase-slug {
       position: absolute;
       bottom: 0;
@@ -440,25 +458,25 @@
 
     <div class="showcase-heading">what it's good for:</div>
     <div class="showcase">
-      <a class="showcase-card" href="/a-pomodoro-timer" data-showcase>
+      <a class="showcase-card" href="/color-palette-generator" data-showcase data-iframe="/color-palette-generator">
         <div class="showcase-word">tiny <em>useful</em> apps, in seconds</div>
         <div class="showcase-hover">
-          <div class="showcase-img-placeholder"></div>
-          <div class="showcase-slug">a-pomodoro-timer</div>
+          <div class="showcase-iframe-wrap"></div>
+          <div class="showcase-slug">color-palette-generator</div>
         </div>
       </a>
-      <a class="showcase-card" href="/periodic-table-of-elements" data-showcase>
+      <a class="showcase-card" href="/how-to-cheat-on-an-exam" data-showcase data-iframe="/how-to-cheat-on-an-exam">
         <div class="showcase-word"><em>good vibes</em> only</div>
         <div class="showcase-hover">
-          <div class="showcase-img-placeholder"></div>
-          <div class="showcase-slug">periodic-table-of-elements</div>
+          <div class="showcase-iframe-wrap"></div>
+          <div class="showcase-slug">how-to-cheat-on-an-exam</div>
         </div>
       </a>
-      <a class="showcase-card" href="/a-full-chess-game-with-ai-opponent" data-showcase>
+      <a class="showcase-card" href="/3d-solar-system-explorer" data-showcase data-iframe="/3d-solar-system-explorer">
         <div class="showcase-word">can do <em>complex</em> things too!</div>
         <div class="showcase-hover">
-          <div class="showcase-img-placeholder"></div>
-          <div class="showcase-slug">a-full-chess-game-with-ai-opponent</div>
+          <div class="showcase-iframe-wrap"></div>
+          <div class="showcase-slug">3d-solar-system-explorer</div>
         </div>
       </a>
     </div>
@@ -570,6 +588,25 @@
 
     modal.addEventListener('click', (e) => {
       if (e.target === modal) modal.classList.remove('open');
+    });
+
+    // Load showcase iframes (lazy — after page load)
+    document.querySelectorAll('.showcase-card[data-iframe]').forEach(card => {
+      const wrap = card.querySelector('.showcase-iframe-wrap');
+      if (!wrap) return;
+      const iframe = document.createElement('iframe');
+      iframe.src = card.dataset.iframe;
+      iframe.loading = 'lazy';
+      // Scale iframe to fit the card
+      const updateScale = () => {
+        const rect = wrap.getBoundingClientRect();
+        const scale = Math.min(rect.width / 1280, rect.height / 800);
+        iframe.style.transform = `scale(${scale})`;
+      };
+      iframe.addEventListener('load', updateScale);
+      wrap.prepend(iframe);
+      window.addEventListener('resize', updateScale);
+      requestAnimationFrame(updateScale);
     });
 
     // Handle ?improve=slug from the branding bar
