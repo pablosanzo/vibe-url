@@ -603,7 +603,7 @@
       // Scale iframe to fit the card
       const updateScale = () => {
         const rect = wrap.getBoundingClientRect();
-        const scale = Math.min(rect.width / 1280, rect.height / 800);
+        const scale = Math.max(rect.width / 1280, rect.height / 800);
         iframe.style.transform = `scale(${scale})`;
       };
       iframe.addEventListener('load', updateScale);
