@@ -551,6 +551,13 @@ app.get('/api/generate/:slug', async (req, res) => {
       saveData(data);
       console.log(`[build:${slug}] completed in ${buildDuration}s`);
 
+      // Check if slug is safe to showcase (non-blocking)
+      if (mistral) {
+        moderateSlug(slug).catch(err => {
+          console.log(`[build:${slug}] moderation failed: ${err.message}`);
+        });
+      }
+
       broadcast({ type: 'done', slug });
     } else {
       // Keep the build log even on failure — move it before deleting the dir
@@ -626,6 +633,19 @@ app.get('/:slug/{*filepath}', (req, res) => {
   res.status(404).send('Not found');
 });
 
+// --- Public API ---
+
+// Returns recent projects that are safe to showcase
+app.get('/api/showcase', (req, res) => {
+  const data = loadData();
+  const projects = Object.entries(data.apps || {})
+    .filter(([, app]) => app.showcaseSafe === true)
+    .sort((a, b) => (b[1].createdAt || '').localeCompare(a[1].createdAt || ''))
+    .slice(0, 20)
+    .map(([slug, app]) => ({ slug, createdAt: app.createdAt, visits: app.visits || 0 }));
+  res.json(projects);
+});
+
 // --- Helpers ---
 
 function sanitizeSlug(raw) {
@@ -636,6 +656,29 @@ function sanitizeSlug(raw) {
 
 function slugToPrompt(slug) {
   return slug.replace(/[-_]/g, ' ').trim();
+}
+
+async function moderateSlug(slug) {
+  const prompt = slugToPrompt(slug);
+  const result = await mistral.chat.complete({
+    model: 'mistral-small-latest',
+    messages: [{ role: 'user', content: `We run vibe-url.com, a site where users type a description in the URL and get a generated web app. We show recently created apps in a public carousel on our homepage.
+
+Would this app title be appropriate to display publicly in the carousel? Consider: profanity, sexual content, hate speech, violence, drug references, or anything a general audience might find offensive.
+
+Title: "${prompt}"
+
+Reply with just SAFE or UNSAFE.` }],
+    temperature: 0,
+  });
+  const answer = (result.choices[0].message.content || '').trim().toUpperCase();
+  const safe = answer.startsWith('SAFE');
+  const data = loadData();
+  if (data.apps[slug]) {
+    data.apps[slug].showcaseSafe = safe;
+    saveData(data);
+  }
+  console.log(`[build:${slug}] moderation: ${safe ? 'SAFE' : 'UNSAFE'}`);
 }
 
 function brandingBar(slug) {
