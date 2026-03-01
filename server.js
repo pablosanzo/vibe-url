@@ -476,14 +476,24 @@ app.get('/:slug', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'loading.html'));
 });
 
-// Serve static assets within generated apps
-app.get('/:slug/:file', (req, res) => {
+// Serve static assets within generated apps (any depth)
+app.get('/:slug/{*filepath}', (req, res) => {
   const slug = sanitizeSlug(req.params.slug);
   if (!slug) return res.status(400).send('Invalid URL');
 
-  const filePath = path.join(APPS_DIR, slug, req.params.file);
-  if (fs.existsSync(filePath)) {
-    return res.sendFile(filePath);
+  // filepath is an array of path segments in Express 5
+  const segments = Array.isArray(req.params.filepath) ? req.params.filepath : [req.params.filepath];
+  const subPath = segments.join('/');
+  if (!subPath) return res.status(404).send('Not found');
+
+  // Prevent directory traversal
+  const resolved = path.resolve(path.join(APPS_DIR, slug, subPath));
+  if (!resolved.startsWith(path.resolve(path.join(APPS_DIR, slug)))) {
+    return res.status(403).send('Forbidden');
+  }
+
+  if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+    return res.sendFile(resolved);
   }
   res.status(404).send('Not found');
 });
