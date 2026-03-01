@@ -261,6 +261,11 @@ app.get('/api/generate/:slug', (req, res) => {
 
   builds.set(slug, { process: vibeProcess, clients, logs });
 
+  // Let the client know we're connected and working
+  const startMsg = 'mistral vibe is generating your app';
+  logs.push(startMsg);
+  res.write(`data: ${JSON.stringify({ type: 'log', message: startMsg })}\n\n`);
+
   const broadcast = (data) => {
     const msg = `data: ${JSON.stringify(data)}\n\n`;
     for (const client of clients) {
@@ -457,19 +462,19 @@ function extractLogMessage(msg) {
 
   if (msg.role === 'assistant' && msg.tool_calls) {
     const tool = msg.tool_calls[0];
-    if (tool?.function?.name === 'write_file') return 'Writing your app...';
-    if (tool?.function?.name) return `Running ${tool.function.name}...`;
+    if (tool?.function?.name === 'write_file') return 'writing your app';
+    if (tool?.function?.name) return `running ${tool.function.name}`;
   }
 
   if (msg.role === 'assistant' && msg.content) {
-    return msg.content.substring(0, 300);
+    return msg.content.substring(0, 300).toLowerCase();
   }
 
   if (msg.role === 'tool' && msg.name === 'write_file') {
-    return 'File written successfully';
+    return 'file written successfully';
   }
   if (msg.role === 'tool') {
-    return `${msg.name || 'tool'} completed`;
+    return `${(msg.name || 'tool')} completed`;
   }
 
   return null;
