@@ -463,9 +463,12 @@ app.get('/:slug', (req, res) => {
     data.apps[slug].visits = (data.apps[slug].visits || 0) + 1;
     saveData(data);
 
-    // Inject branding bar
+    // Inject branding bar (replace LAST </body> — some apps have it in JS strings)
     let html = fs.readFileSync(appFile, 'utf-8');
-    html = html.replace('</body>', brandingBar(slug) + '</body>');
+    const lastIdx = html.lastIndexOf('</body>');
+    if (lastIdx !== -1) {
+      html = html.slice(0, lastIdx) + brandingBar(slug) + html.slice(lastIdx);
+    }
     res.type('html').send(html);
     return;
   }
