@@ -184,6 +184,18 @@ app.delete('/admin/api/projects/:slug', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Public API ---
+
+app.get('/api/latest', (req, res) => {
+  const data = loadData();
+  const slugs = Object.entries(data.apps || {})
+    .filter(([, v]) => v.createdAt)
+    .sort((a, b) => new Date(b[1].createdAt) - new Date(a[1].createdAt))
+    .slice(0, 30)
+    .map(([slug]) => slug);
+  res.json({ slugs });
+});
+
 // --- Landing page ---
 
 app.get('/', (req, res) => {

@@ -33,6 +33,7 @@
       justify-content: center;
       position: relative;
       overflow: hidden;
+      padding-bottom: 3rem;
     }
 
     body::before {
@@ -143,16 +144,35 @@
     .go-btn:hover { opacity: 0.9; }
     .go-btn:active { transform: scale(0.97); }
 
-    /* Examples */
-    .examples {
-      margin-top: 2rem;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      justify-content: center;
+    /* Ticker */
+    .ticker-wrap {
+      width: 100vw;
+      position: relative;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-top: 1rem;
+      overflow: hidden;
+      mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
     }
 
-    .example {
+    .ticker {
+      display: flex;
+      gap: 0.5rem;
+      width: max-content;
+      animation: ticker-scroll 60s linear infinite;
+    }
+
+    .ticker:hover {
+      animation-play-state: paused;
+    }
+
+    @keyframes ticker-scroll {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+
+    .ticker-item {
       font-size: 0.7rem;
       color: var(--text-dim);
       background: var(--surface);
@@ -162,16 +182,26 @@
       cursor: pointer;
       transition: border-color 0.2s, color 0.2s;
       text-decoration: none;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
-    .example:hover {
+    .ticker-item:hover {
       border-color: var(--accent);
       color: var(--text);
     }
 
+    .showcase-heading {
+      font-size: 1rem;
+      color: var(--text-dim);
+      letter-spacing: 0.02em;
+      margin-top: 3rem;
+      margin-bottom: 1.5rem;
+    }
+
     /* Showcase examples */
     .showcase {
-      margin-top: 2.5rem;
+      margin-top: 0;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 1rem;
@@ -184,7 +214,7 @@
 
     .showcase-card {
       position: relative;
-      aspect-ratio: 4/3;
+      aspect-ratio: 5/3;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -218,6 +248,14 @@
     .showcase-word em {
       font-style: normal;
       color: var(--accent);
+    }
+
+    .showcase-sub {
+      display: block;
+      font-size: 0.7em;
+      color: var(--text-dim);
+      font-weight: 500;
+      margin-top: 0.3rem;
     }
 
     .showcase-hover {
@@ -317,30 +355,28 @@
       <button type="submit" class="go-btn">build</button>
     </form>
 
-    <div class="examples">
-      <a class="example" href="#" data-slug="a-beautiful-calculator">a-beautiful-calculator</a>
-      <a class="example" href="#" data-slug="countdown-to-new-years-2027">countdown-to-new-years-2027</a>
-      <a class="example" href="#" data-slug="periodic-table-of-elements">periodic-table-of-elements</a>
-      <a class="example" href="#" data-slug="a-pomodoro-timer">a-pomodoro-timer</a>
+    <div class="ticker-wrap" id="tickerWrap" style="display:none">
+      <div class="ticker" id="ticker"></div>
     </div>
 
+    <div class="showcase-heading">what it's good for:</div>
     <div class="showcase">
       <a class="showcase-card" href="/a-pomodoro-timer" data-showcase>
-        <div class="showcase-word"><em>Useful</em> apps, in seconds</div>
+        <div class="showcase-word">tiny <em>useful</em> apps, in seconds</div>
         <div class="showcase-hover">
           <div class="showcase-img-placeholder"></div>
           <div class="showcase-slug">a-pomodoro-timer</div>
         </div>
       </a>
       <a class="showcase-card" href="/periodic-table-of-elements" data-showcase>
-        <div class="showcase-word">Always follows <em>the constitution</em></div>
+        <div class="showcase-word">good vibes only<span class="showcase-sub">(we have a constitution)</span></div>
         <div class="showcase-hover">
           <div class="showcase-img-placeholder"></div>
           <div class="showcase-slug">periodic-table-of-elements</div>
         </div>
       </a>
       <a class="showcase-card" href="/a-full-chess-game-with-ai-opponent" data-showcase>
-        <div class="showcase-word">Handles <em>complexity</em></div>
+        <div class="showcase-word">can do <em>complex</em> things too!</div>
         <div class="showcase-hover">
           <div class="showcase-img-placeholder"></div>
           <div class="showcase-slug">a-full-chess-game-with-ai-opponent</div>
@@ -393,13 +429,25 @@
       }
     });
 
-    document.querySelectorAll('.example').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.preventDefault();
-        input.value = el.dataset.slug;
-        input.focus();
-      });
-    });
+    // Load ticker with latest built apps
+    fetch('/api/latest')
+      .then(r => r.json())
+      .then(({ slugs }) => {
+        if (!slugs || slugs.length === 0) return;
+        const ticker = document.getElementById('ticker');
+        const tickerWrap = document.getElementById('tickerWrap');
+        const minItems = Math.max(1, Math.ceil(30 / slugs.length));
+        const oneSet = [];
+        for (let i = 0; i < minItems; i++) oneSet.push(...slugs);
+        const all = [...oneSet, ...oneSet];
+        ticker.innerHTML = all.map(s =>
+          `<a class="ticker-item" href="/${s}">${s}</a>`
+        ).join('');
+        const duration = Math.max(60, oneSet.length * 6);
+        ticker.style.animationDuration = duration + 's';
+        tickerWrap.style.display = '';
+      })
+      .catch(() => {});
 
     // Handle ?improve=slug from the branding bar
     const params = new URLSearchParams(window.location.search);
