@@ -431,7 +431,7 @@
 
     .project-row {
       display: grid;
-      grid-template-columns: 1fr 150px 80px 44px;
+      grid-template-columns: 1fr 150px 80px 90px 44px;
       align-items: center;
       padding: 0.75rem 1.25rem;
       border-bottom: 1px solid var(--border);
@@ -752,9 +752,12 @@
 
     // --- Projects ---
     async function loadProjects() {
-      const res = await fetch('/admin/api/projects');
-      const data = await res.json();
-      const projects = data.projects;
+      const [projRes, constRes] = await Promise.all([
+        fetch('/admin/api/projects'),
+        fetch('/admin/api/constitution'),
+      ]);
+      const { projects } = await projRes.json();
+      const { hash: currentHash } = await constRes.json();
 
       const n = projects.length;
       const totalVisits = projects.reduce((s, p) => s + p.visits, 0);
@@ -766,7 +769,7 @@
       }
 
       let html = `<div class="project-row header">
-        <span>slug</span><span>created</span><span>visits</span><span></span>
+        <span>slug</span><span>created</span><span>visits</span><span>constitution</span><span></span>
       </div>`;
 
       for (const p of projects) {
@@ -774,10 +777,15 @@
         const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
           + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
+        const hashLabel = p.constitutionHash || '—';
+        const isCurrent = p.constitutionHash && p.constitutionHash === currentHash;
+        const hashStyle = !p.constitutionHash ? 'color:var(--text-dim)' : isCurrent ? 'color:var(--green, #34d399)' : 'color:var(--accent)';
+
         html += `<div class="project-row">
           <a class="project-slug" href="/${p.slug}" target="_blank">${p.slug}</a>
           <span class="project-date">${dateStr}</span>
           <span class="project-visits">${p.visits}</span>
+          <span style="font-size:0.7rem;${hashStyle}">${hashLabel}</span>
           <button class="project-delete" onclick="deleteProject('${p.slug}')" title="Delete">del</button>
         </div>`;
       }

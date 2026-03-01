@@ -154,7 +154,8 @@ app.get('/admin/me', (req, res) => {
 
 app.get('/admin/api/constitution', requireAuth, (req, res) => {
   const content = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
-  res.json({ content });
+  const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
+  res.json({ content, hash });
 });
 
 app.put('/admin/api/constitution', requireAuth, (req, res) => {
@@ -199,6 +200,7 @@ app.get('/admin/api/projects', requireAuth, (req, res) => {
         slug,
         createdAt: appData.createdAt || stat.birthtime.toISOString(),
         visits: appData.visits || 0,
+        constitutionHash: appData.constitutionHash || null,
       });
     }
   }
@@ -298,6 +300,7 @@ app.get('/api/generate/:slug', (req, res) => {
   const prompt = slugToPrompt(slug);
   // Read constitution fresh each time (so admin edits take effect)
   const constitution = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
+  const constitutionHash = crypto.createHash('sha256').update(constitution).digest('hex').slice(0, 8);
   const fullPrompt = `${constitution}\n\n## User request\n${prompt}`;
 
   fs.mkdirSync(appDir, { recursive: true });
@@ -375,6 +378,7 @@ app.get('/api/generate/:slug', (req, res) => {
       if (!data.apps[slug]) data.apps[slug] = {};
       data.apps[slug].createdAt = new Date().toISOString();
       data.apps[slug].visits = 0;
+      data.apps[slug].constitutionHash = constitutionHash;
       saveData(data);
 
       broadcast({ type: 'done', slug });
