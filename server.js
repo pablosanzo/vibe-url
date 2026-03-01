@@ -154,8 +154,55 @@ app.get('/admin/me', (req, res) => {
 
 app.get('/admin/api/constitution', requireAuth, (req, res) => {
   const content = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
-  const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
-  res.json({ content, hash });
+  const data = loadData();
+  const version = data.constitutionVersion || 1;
+  res.json({ content, version });
+});
+
+app.get('/admin/api/constitution/versions', requireAuth, (req, res) => {
+  const data = loadData();
+  const currentVersion = data.constitutionVersion || 1;
+  const versions = [{ version: currentVersion, label: `v${currentVersion} (current)`, current: true }];
+
+  // Read history files, sorted newest first
+  if (fs.existsSync(CONSTITUTION_HISTORY_DIR)) {
+    const files = fs.readdirSync(CONSTITUTION_HISTORY_DIR)
+      .filter(f => f.endsWith('.md'))
+      .sort()
+      .reverse();
+
+    for (let i = 0; i < files.length; i++) {
+      const v = currentVersion - 1 - i;
+      if (v < 1) break;
+      versions.push({ version: v, label: `v${v}`, file: files[i], current: false });
+    }
+  }
+
+  res.json({ versions });
+});
+
+app.get('/admin/api/constitution/versions/:version', requireAuth, (req, res) => {
+  const data = loadData();
+  const currentVersion = data.constitutionVersion || 1;
+  const requestedVersion = parseInt(req.params.version);
+
+  if (requestedVersion === currentVersion) {
+    const content = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
+    return res.json({ content, version: currentVersion });
+  }
+
+  // Find the right history file
+  const files = fs.existsSync(CONSTITUTION_HISTORY_DIR)
+    ? fs.readdirSync(CONSTITUTION_HISTORY_DIR).filter(f => f.endsWith('.md')).sort().reverse()
+    : [];
+
+  const idx = currentVersion - 1 - requestedVersion;
+  if (idx < 0 || idx >= files.length) {
+    return res.status(404).json({ error: 'Version not found' });
+  }
+
+  const content = fs.readFileSync(path.join(CONSTITUTION_HISTORY_DIR, files[idx]), 'utf-8');
+  res.json({ content, version: requestedVersion });
 });
 
 app.put('/admin/api/constitution', requireAuth, (req, res) => {
@@ -172,8 +219,13 @@ app.put('/admin/api/constitution', requireAuth, (req, res) => {
     current
   );
 
+  // Increment version
+  const data = loadData();
+  data.constitutionVersion = (data.constitutionVersion || 1) + 1;
+  saveData(data);
+
   fs.writeFileSync(CONSTITUTION_FILE, content);
-  res.json({ ok: true });
+  res.json({ ok: true, version: data.constitutionVersion });
 
   // Regenerate summary in the background
   generateConstitutionSummary();
@@ -200,7 +252,7 @@ app.get('/admin/api/projects', requireAuth, (req, res) => {
         slug,
         createdAt: appData.createdAt || stat.birthtime.toISOString(),
         visits: appData.visits || 0,
-        constitutionHash: appData.constitutionHash || null,
+        constitutionVersion: appData.constitutionVersion || null,
       });
     }
   }
@@ -300,7 +352,8 @@ app.get('/api/generate/:slug', (req, res) => {
   const prompt = slugToPrompt(slug);
   // Read constitution fresh each time (so admin edits take effect)
   const constitution = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
-  const constitutionHash = crypto.createHash('sha256').update(constitution).digest('hex').slice(0, 8);
+  const buildData = loadData();
+  const constitutionVersion = buildData.constitutionVersion || 1;
   const fullPrompt = `${constitution}\n\n## User request\n${prompt}`;
 
   fs.mkdirSync(appDir, { recursive: true });
@@ -378,7 +431,7 @@ app.get('/api/generate/:slug', (req, res) => {
       if (!data.apps[slug]) data.apps[slug] = {};
       data.apps[slug].createdAt = new Date().toISOString();
       data.apps[slug].visits = 0;
-      data.apps[slug].constitutionHash = constitutionHash;
+      data.apps[slug].constitutionVersion = constitutionVersion;
       saveData(data);
 
       broadcast({ type: 'done', slug });

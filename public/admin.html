@@ -308,6 +308,47 @@
       pointer-events: none;
     }
 
+    .version-select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.4rem 0.6rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 1.4rem;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b6b76'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.5rem center;
+    }
+
+    .version-select:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .version-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .version-viewing {
+      font-size: 0.65rem;
+      color: var(--accent);
+      margin-left: 0.5rem;
+    }
+
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
     .constitution-editor {
       flex: 1;
       min-height: 400px;
@@ -518,7 +559,7 @@
       .page-header { padding: 1.5rem 1rem 0; }
       .editor-wrap { padding: 1rem; }
       .projects-wrap { padding: 1rem; }
-      .project-row { grid-template-columns: 1fr 100px 60px 36px; padding: 0.6rem 0.75rem; }
+      .project-row { grid-template-columns: 1fr 100px 60px 70px 36px; padding: 0.6rem 0.75rem; }
     }
   </style>
 </head>
@@ -569,7 +610,10 @@
       <div class="editor-wrap">
         <div class="editor-toolbar">
           <span class="editor-hint" id="editorHint"></span>
-          <button class="save-btn disabled" id="saveBtn" onclick="requestSave()">save & deploy</button>
+          <div class="toolbar-right">
+            <select class="version-select" id="versionSelect"></select>
+            <button class="save-btn disabled" id="saveBtn" onclick="requestSave()">save & deploy</button>
+          </div>
         </div>
         <textarea class="constitution-editor" id="constitutionEditor" spellcheck="false"></textarea>
       </div>
@@ -689,16 +733,57 @@
 
     // --- Constitution ---
     let savedContent = '';
+    let currentVersion = 1;
+    let viewingOldVersion = false;
+    const versionSelect = document.getElementById('versionSelect');
 
     async function loadConstitution() {
       const res = await fetch('/admin/api/constitution');
       const data = await res.json();
       editor.value = data.content;
       savedContent = data.content;
+      currentVersion = data.version || 1;
+      viewingOldVersion = false;
+      editor.readOnly = false;
       updateDirtyState();
+      loadVersions();
     }
 
+    async function loadVersions() {
+      const res = await fetch('/admin/api/constitution/versions');
+      const data = await res.json();
+      versionSelect.innerHTML = '';
+      for (const v of data.versions) {
+        const opt = document.createElement('option');
+        opt.value = v.version;
+        opt.textContent = v.label;
+        if (v.current) opt.selected = true;
+        versionSelect.appendChild(opt);
+      }
+    }
+
+    versionSelect.addEventListener('change', async () => {
+      const selected = parseInt(versionSelect.value);
+      if (selected === currentVersion) {
+        // Back to current version
+        editor.value = savedContent;
+        editor.readOnly = false;
+        viewingOldVersion = false;
+        updateDirtyState();
+        return;
+      }
+      // Load old version (read-only)
+      const res = await fetch(`/admin/api/constitution/versions/${selected}`);
+      const data = await res.json();
+      editor.value = data.content;
+      editor.readOnly = true;
+      viewingOldVersion = true;
+      saveBtn.classList.add('disabled');
+      editorHint.textContent = `viewing v${selected} (read-only) — switch back to current to edit`;
+    });
+
     function updateDirtyState() {
+      if (viewingOldVersion) return;
       const dirty = editor.value !== savedContent;
       saveBtn.classList.toggle('disabled', !dirty);
       editorHint.textContent = dirty ? 'unsaved changes — cmd+s to save' : '';
@@ -709,6 +794,7 @@
     const deployModal = document.getElementById('deployModal');
 
     function requestSave() {
+      if (viewingOldVersion) return;
       if (editor.value === savedContent) return;
       deployModal.classList.add('active');
     }
@@ -730,10 +816,13 @@
         body: JSON.stringify({ content: editor.value }),
       });
       if (res.ok) {
+        const result = await res.json();
         savedContent = editor.value;
+        currentVersion = result.version;
         saveBtn.textContent = 'deployed';
         saveBtn.classList.add('saved');
         editorHint.textContent = 'live — all new builds will use this constitution';
+        loadVersions();
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(() => {
           saveBtn.textContent = 'save & deploy';
@@ -757,7 +846,7 @@
         fetch('/admin/api/constitution'),
       ]);
       const { projects } = await projRes.json();
-      const { hash: currentHash } = await constRes.json();
+      const { version: currentVersion } = await constRes.json();
 
       const n = projects.length;
       const totalVisits = projects.reduce((s, p) => s + p.visits, 0);
@@ -777,15 +866,15 @@
         const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
           + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-        const hashLabel = p.constitutionHash || '—';
-        const isCurrent = p.constitutionHash && p.constitutionHash === currentHash;
-        const hashStyle = !p.constitutionHash ? 'color:var(--text-dim)' : isCurrent ? 'color:var(--green, #34d399)' : 'color:var(--accent)';
+        const vLabel = p.constitutionVersion ? `v${p.constitutionVersion}` : '—';
+        const isCurrent = p.constitutionVersion && p.constitutionVersion === currentVersion;
+        const vStyle = !p.constitutionVersion ? 'color:var(--text-dim)' : isCurrent ? 'color:var(--green, #34d399)' : 'color:var(--accent)';
 
         html += `<div class="project-row">
           <a class="project-slug" href="/${p.slug}" target="_blank">${p.slug}</a>
           <span class="project-date">${dateStr}</span>
           <span class="project-visits">${p.visits}</span>
-          <span style="font-size:0.7rem;${hashStyle}">${hashLabel}</span>
+          <span style="font-size:0.7rem;${vStyle}">${vLabel}</span>
           <button class="project-delete" onclick="deleteProject('${p.slug}')" title="Delete">del</button>
         </div>`;
       }
