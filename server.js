@@ -5,6 +5,8 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 
+const { Mistral } = require('@mistralai/mistralai');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const APPS_DIR = path.join(__dirname, 'apps');
@@ -29,6 +31,41 @@ function saveData(data) {
 // Initialize data file and constitution history
 if (!fs.existsSync(DATA_FILE)) saveData({ apps: {}, logins: [] });
 fs.mkdirSync(CONSTITUTION_HISTORY_DIR, { recursive: true });
+
+// --- Mistral API client (reads key from vibe CLI config) ---
+
+function getMistralKey() {
+  try {
+    const envFile = fs.readFileSync(path.join(require('os').homedir(), '.vibe', '.env'), 'utf-8');
+    const match = envFile.match(/MISTRAL_API_KEY=(.+)/);
+    return match ? match[1].trim() : null;
+  } catch { return null; }
+}
+
+const mistralKey = getMistralKey();
+const mistral = mistralKey ? new Mistral({ apiKey: mistralKey }) : null;
+
+async function generateConstitutionSummary() {
+  if (!mistral) {
+    console.error('No Mistral API key found, skipping constitution summary generation');
+    return;
+  }
+  try {
+    const constitution = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
+    const result = await mistral.chat.complete({
+      model: 'mistral-small-latest',
+      messages: [{ role: 'user', content: `You are summarizing a "constitution" — a set of rules that governs how an AI generates web apps on vibe-url.com.\n\nCreate a concise summary as 5-8 bullet points for end users visiting the site. Focus on:\n- What they can expect from generated apps\n- What kinds of things are allowed and encouraged\n- What is NOT allowed (harmful content, etc.)\n- Any cool design/quality guarantees\n\nKeep it friendly, concise, and in lowercase style (matching the site's tone). Each bullet should be one short sentence. No markdown headers, just bullet points starting with •\n\nHere is the constitution:\n\n${constitution}` }],
+    });
+    const summary = result.choices[0].message.content.trim();
+    const data = loadData();
+    data.constitutionSummary = summary;
+    data.summarizedAt = new Date().toISOString();
+    saveData(data);
+    console.log('Constitution summary generated');
+  } catch (err) {
+    console.error('Failed to generate constitution summary:', err.message);
+  }
+}
 
 // --- Auth ---
 
@@ -136,6 +173,9 @@ app.put('/admin/api/constitution', requireAuth, (req, res) => {
 
   fs.writeFileSync(CONSTITUTION_FILE, content);
   res.json({ ok: true });
+
+  // Regenerate summary in the background
+  generateConstitutionSummary();
 });
 
 app.get('/admin/api/projects', requireAuth, (req, res) => {
@@ -185,6 +225,14 @@ app.delete('/admin/api/projects/:slug', requireAuth, (req, res) => {
 });
 
 // --- Public API ---
+
+app.get('/api/constitution-summary', (req, res) => {
+  const data = loadData();
+  res.json({
+    summary: data.constitutionSummary || null,
+    summarizedAt: data.summarizedAt || null,
+  });
+});
 
 app.get('/api/latest', (req, res) => {
   const data = loadData();

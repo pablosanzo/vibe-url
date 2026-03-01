@@ -250,12 +250,18 @@
       color: var(--accent);
     }
 
-    .showcase-sub {
-      display: block;
-      font-size: 0.7em;
+    .constitution-link {
+      display: inline-block;
+      margin-top: 0.75rem;
+      font-size: 0.65rem;
       color: var(--text-dim);
-      font-weight: 500;
-      margin-top: 0.3rem;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+      transition: color 0.2s;
+    }
+
+    .constitution-link:hover {
+      color: var(--accent);
     }
 
     .showcase-hover {
@@ -333,6 +339,78 @@
       height: 14px;
       width: auto;
     }
+
+    /* Constitution modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      max-width: 480px;
+      width: calc(100% - 2rem);
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+      animation: modal-in 0.2s ease;
+    }
+
+    @keyframes modal-in {
+      from { opacity: 0; transform: scale(0.96) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 0.25rem;
+      line-height: 1;
+      transition: color 0.2s;
+    }
+
+    .modal-close:hover {
+      color: var(--text);
+    }
+
+    .modal-title {
+      font-family: var(--sans);
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      letter-spacing: -0.01em;
+    }
+
+    .modal-body {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      line-height: 1.8;
+      white-space: pre-line;
+    }
+
+    .modal-loading {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
   </style>
 </head>
 <body>
@@ -369,7 +447,7 @@
         </div>
       </a>
       <a class="showcase-card" href="/periodic-table-of-elements" data-showcase>
-        <div class="showcase-word">good vibes only<span class="showcase-sub">(we have a constitution)</span></div>
+        <div class="showcase-word"><em>good vibes</em> only</div>
         <div class="showcase-hover">
           <div class="showcase-img-placeholder"></div>
           <div class="showcase-slug">periodic-table-of-elements</div>
@@ -383,6 +461,7 @@
         </div>
       </a>
     </div>
+    <a href="#" class="constitution-link">read our constitution</a>
   </div>
 
   <a class="footer" href="https://mistral.ai/products/vibe" target="_blank" rel="noopener">
@@ -401,6 +480,17 @@
     </svg>
     <span class="footer-text">mistral vibe</span>
   </a>
+
+  <!-- Constitution modal -->
+  <div class="modal-overlay" id="constitutionModal">
+    <div class="modal">
+      <button class="modal-close" id="modalClose">&times;</button>
+      <div class="modal-title">our constitution</div>
+      <div class="modal-body" id="modalBody">
+        <span class="modal-loading">loading...</span>
+      </div>
+    </div>
+  </div>
 
   <script>
     const form = document.getElementById('urlForm');
@@ -448,6 +538,36 @@
         tickerWrap.style.display = '';
       })
       .catch(() => {});
+
+    // Constitution modal
+    const modal = document.getElementById('constitutionModal');
+    const modalBody = document.getElementById('modalBody');
+
+    document.querySelector('.constitution-link').addEventListener('click', (e) => {
+      e.preventDefault();
+      modal.classList.add('open');
+      modalBody.innerHTML = '<span class="modal-loading">loading...</span>';
+      fetch('/api/constitution-summary')
+        .then(r => r.json())
+        .then(({ summary }) => {
+          if (summary) {
+            modalBody.textContent = summary;
+          } else {
+            modalBody.textContent = 'no summary available yet.';
+          }
+        })
+        .catch(() => {
+          modalBody.textContent = 'failed to load summary.';
+        });
+    });
+
+    document.getElementById('modalClose').addEventListener('click', () => {
+      modal.classList.remove('open');
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.remove('open');
+    });
 
     // Handle ?improve=slug from the branding bar
     const params = new URLSearchParams(window.location.search);
