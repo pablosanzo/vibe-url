@@ -359,6 +359,11 @@ app.get('/api/generate/:slug', async (req, res) => {
 
   fs.mkdirSync(appDir, { recursive: true });
 
+  // Start moderation in parallel with everything else (non-blocking)
+  const moderationPromise = mistral
+    ? moderateSlug(slug).catch(err => console.log(`[build:${slug}] moderation failed: ${err.message}`))
+    : Promise.resolve();
+
   // Pre-research: check if this prompt needs real-world data, and fetch it
   let researchSection = '';
   let researchDuration = null;
@@ -551,12 +556,8 @@ app.get('/api/generate/:slug', async (req, res) => {
       saveData(data);
       console.log(`[build:${slug}] completed in ${buildDuration}s`);
 
-      // Check if slug is safe to showcase (non-blocking)
-      if (mistral) {
-        moderateSlug(slug).catch(err => {
-          console.log(`[build:${slug}] moderation failed: ${err.message}`);
-        });
-      }
+      // Ensure moderation result is saved (already running in parallel since build start)
+      moderationPromise.then(() => {}).catch(() => {});
 
       broadcast({ type: 'done', slug });
     } else {
