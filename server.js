@@ -492,7 +492,7 @@ app.get('/:slug/:file', (req, res) => {
 
 function sanitizeSlug(raw) {
   const slug = raw.toLowerCase().replace(/[^a-z0-9\-_]/g, '');
-  if (!slug || slug.length > 200) return null;
+  if (!slug || slug.length > 2000) return null;
   return slug;
 }
 

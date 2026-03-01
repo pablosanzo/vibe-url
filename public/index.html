@@ -429,6 +429,7 @@
         placeholder="a-pomodoro-timer-with-ambient-sounds"
         autocomplete="off"
         autofocus
+        maxlength="2000"
       />
       <button type="submit" class="go-btn">build</button>
     </form>
@@ -496,12 +497,12 @@
     const form = document.getElementById('urlForm');
     const input = document.getElementById('urlInput');
 
-    // Replace spaces with dashes as user types
+    // Replace spaces with dashes as user types, enforce 2000 char limit
     input.addEventListener('input', () => {
       const pos = input.selectionStart;
       const before = input.value;
-      input.value = before.replace(/ /g, '-');
-      input.selectionStart = input.selectionEnd = pos;
+      input.value = before.replace(/ /g, '-').slice(0, 2000);
+      input.selectionStart = input.selectionEnd = Math.min(pos, 2000);
     });
 
     form.addEventListener('submit', (e) => {
@@ -513,7 +514,8 @@
         .replace(/\s+/g, '-')
         .replace(/[^a-z0-9\-_]/g, '')
         .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
+        .replace(/^-|-$/g, '')
+        .slice(0, 2000);
       if (slug) {
         window.location.href = '/' + slug;
       }
