@@ -169,56 +169,131 @@
       color: var(--text);
     }
 
-    /* How it works */
-    .how {
-      margin-top: 4rem;
+    /* Showcase examples */
+    .showcase {
+      margin-top: 2.5rem;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 1.5rem;
+      gap: 1rem;
       text-align: left;
     }
 
     @media (max-width: 600px) {
-      .how { grid-template-columns: 1fr; }
+      .showcase { grid-template-columns: 1fr; }
     }
 
-    .step {
-      padding: 1.25rem;
+    .showcase-card {
+      position: relative;
+      aspect-ratio: 4/3;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.15s;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
     }
 
-    .step-num {
+    .showcase-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .showcase-word {
       font-family: var(--sans);
-      font-size: 0.65rem;
+      font-size: clamp(1.3rem, 2.5vw, 1.6rem);
       font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      text-align: center;
+      padding: 1.25rem;
+      transition: opacity 0.25s ease;
+      z-index: 2;
+    }
+
+    .showcase-word em {
+      font-style: normal;
       color: var(--accent);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 0.5rem;
     }
 
-    .step-title {
-      font-family: var(--sans);
-      font-size: 0.95rem;
-      font-weight: 600;
-      margin-bottom: 0.35rem;
+    .showcase-hover {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      z-index: 3;
     }
 
-    .step-desc {
-      font-size: 0.7rem;
+    .showcase-card:hover .showcase-word {
+      opacity: 0;
+    }
+
+    .showcase-card:hover .showcase-hover {
+      opacity: 1;
+    }
+
+    .showcase-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .showcase-img-placeholder {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    }
+
+    .showcase-slug {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 0.75rem;
+      background: linear-gradient(transparent, rgba(0,0,0,0.85));
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .showcase-slug::before {
+      content: 'vibe-url.com/';
       color: var(--text-dim);
-      line-height: 1.6;
     }
 
+    /* Footer with Mistral branding */
     .footer {
       position: fixed;
-      bottom: 2rem;
-      font-size: 0.65rem;
+      bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      text-decoration: none;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+
+    .footer:hover {
+      opacity: 1;
+    }
+
+    .footer-text {
+      font-size: 0.6rem;
       color: var(--text-dim);
-      opacity: 0.5;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
+    }
+
+    .footer-logo {
+      height: 14px;
+      width: auto;
     }
   </style>
 </head>
@@ -249,26 +324,47 @@
       <a class="example" href="#" data-slug="a-pomodoro-timer">a-pomodoro-timer</a>
     </div>
 
-    <div class="how">
-      <div class="step">
-        <div class="step-num">01</div>
-        <div class="step-title">Type it</div>
-        <div class="step-desc">Describe any app in the URL bar using simple words separated by hyphens.</div>
-      </div>
-      <div class="step">
-        <div class="step-num">02</div>
-        <div class="step-title">Build it</div>
-        <div class="step-desc">Mistral's Vibe CLI generates a complete app in seconds. Watch it happen live.</div>
-      </div>
-      <div class="step">
-        <div class="step-num">03</div>
-        <div class="step-title">Share it</div>
-        <div class="step-desc">Your app is live at that URL forever. Share the link with anyone.</div>
-      </div>
+    <div class="showcase">
+      <a class="showcase-card" href="/a-pomodoro-timer" data-showcase>
+        <div class="showcase-word"><em>Useful</em> apps, in seconds</div>
+        <div class="showcase-hover">
+          <div class="showcase-img-placeholder"></div>
+          <div class="showcase-slug">a-pomodoro-timer</div>
+        </div>
+      </a>
+      <a class="showcase-card" href="/periodic-table-of-elements" data-showcase>
+        <div class="showcase-word">Always follows <em>the constitution</em></div>
+        <div class="showcase-hover">
+          <div class="showcase-img-placeholder"></div>
+          <div class="showcase-slug">periodic-table-of-elements</div>
+        </div>
+      </a>
+      <a class="showcase-card" href="/a-full-chess-game-with-ai-opponent" data-showcase>
+        <div class="showcase-word">Handles <em>complexity</em></div>
+        <div class="showcase-hover">
+          <div class="showcase-img-placeholder"></div>
+          <div class="showcase-slug">a-full-chess-game-with-ai-opponent</div>
+        </div>
+      </a>
     </div>
   </div>
 
-  <div class="footer">powered by mistral vibe</div>
+  <a class="footer" href="https://mistral.ai/products/vibe" target="_blank" rel="noopener">
+    <span class="footer-text">powered by</span>
+    <svg class="footer-logo" viewBox="0 0 191 136" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M54.3219 0H27.1528V27.0892H54.3219V0Z" fill="#FFD800"/>
+      <path d="M162.984 0H135.815V27.0892H162.984V0Z" fill="#FFD800"/>
+      <path d="M81.482 27.0913H27.1528V54.1805H81.482V27.0913Z" fill="#FFAF00"/>
+      <path d="M162.99 27.0913H108.661V54.1805H162.99V27.0913Z" fill="#FFAF00"/>
+      <path d="M162.971 54.168H27.1528V81.2572H162.971V54.168Z" fill="#FF8205"/>
+      <path d="M54.3219 81.2593H27.1528V108.349H54.3219V81.2593Z" fill="#FA500F"/>
+      <path d="M108.661 81.2593H81.4917V108.349H108.661V81.2593Z" fill="#FA500F"/>
+      <path d="M162.984 81.2593H135.815V108.349H162.984V81.2593Z" fill="#FA500F"/>
+      <path d="M81.4879 108.339H-0.00146484V135.429H81.4879V108.339Z" fill="#E10500"/>
+      <path d="M190.159 108.339H108.661V135.429H190.159V108.339Z" fill="#E10500"/>
+    </svg>
+    <span class="footer-text">mistral vibe</span>
+  </a>
 
   <script>
     const form = document.getElementById('urlForm');
