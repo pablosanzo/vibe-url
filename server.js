@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 3000;
 const APPS_DIR = path.join(__dirname, 'apps');
 const DATA_FILE = path.join(__dirname, 'data.json');
 const CONSTITUTION_FILE = path.join(__dirname, 'constitution.md');
+const DESIGN_GUIDE_FILE = path.join(__dirname, 'design-guide.md');
 const CONSTITUTION_HISTORY_DIR = path.join(__dirname, 'constitution-history');
 
 // --- Data persistence ---
@@ -350,8 +351,9 @@ app.get('/api/generate/:slug', async (req, res) => {
   req.on('close', () => clients.delete(res));
 
   const prompt = slugToPrompt(slug);
-  // Read constitution fresh each time (so admin edits take effect)
+  // Read constitution + design guide fresh each time (so admin edits take effect)
   const constitution = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
+  const designGuide = fs.existsSync(DESIGN_GUIDE_FILE) ? fs.readFileSync(DESIGN_GUIDE_FILE, 'utf-8') : '';
   const buildData = loadData();
   const constitutionVersion = buildData.constitutionVersion || 1;
 
@@ -424,7 +426,7 @@ app.get('/api/generate/:slug', async (req, res) => {
     }
   }
 
-  const fullPrompt = `${constitution}${researchSection}\n\n## User request\n${prompt}`;
+  const fullPrompt = `${constitution}\n\n${designGuide}${researchSection}\n\n## User request\n${prompt}`;
 
   const promptFile = path.join(appDir, '.prompt.txt');
   fs.writeFileSync(promptFile, fullPrompt);
