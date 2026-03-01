@@ -296,8 +296,8 @@
       terminal.scrollTop = terminal.scrollHeight;
     }
 
-    // Estimated progress bar (~35s typical generation)
-    const ESTIMATED_DURATION = 35000;
+    // Estimated progress bar (~60s typical generation with devstral-2)
+    const ESTIMATED_DURATION = 60000;
     let startTime = null;
     let progressInterval = null;
 
@@ -307,97 +307,52 @@
       progressBar.style.width = '0%';
       progressInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
-        // Ease out — fast at first, slows down, never reaches 90%
         const raw = elapsed / ESTIMATED_DURATION;
         const pct = Math.min(88, 90 * (1 - Math.exp(-2.5 * raw)));
         progressBar.style.width = pct + '%';
       }, 200);
     }
 
-    function setDone() {
-      if (progressInterval) clearInterval(progressInterval);
-      progressBar.style.width = '100%';
-      status.classList.add('done');
-      status.innerHTML = '<span>done — redirecting...</span>';
-      addLog('app ready!');
-      setTimeout(() => {
-        window.location.reload();
-      }, 800);
-    }
-
-    function setError(message) {
-      progressBar.classList.remove('indeterminate');
-      progressBar.style.width = '0%';
-      progressBar.style.background = '#f87171';
-      status.classList.add('error');
-      status.innerHTML = `<span>${message}</span>`;
-    }
-
-    // Message queue with pacing
-    const queue = [];
-    let processing = false;
-    const MIN_DELAY = 1000; // minimum 1s between messages
-
-    function processQueue() {
-      if (processing || queue.length === 0) return;
-      processing = true;
-
-      const item = queue.shift();
-
-      if (item.type === 'log') {
-        addLog(item.message);
-      } else if (item.type === 'done') {
-        setDone();
-        return; // stop processing
-      } else if (item.type === 'error') {
-        setError(item.message || 'Generation failed');
-        return; // stop processing
-      }
-
-      setTimeout(() => {
-        processing = false;
-        processQueue();
-      }, MIN_DELAY);
-    }
-
-    function enqueue(data) {
-      // done/error skip the queue — redirect immediately
-      if (data.type === 'done') {
-        setDone();
-        return;
-      }
-      if (data.type === 'error') {
-        setError(data.message || 'Generation failed');
-        return;
-      }
-      queue.push(data);
-      processQueue();
-    }
-
-    // Delay SSE connection so "connecting" shows briefly
+    // Step 1: "connecting" is already in the HTML
+    // Step 2: after 1s, show "building" and connect SSE
     setTimeout(() => {
+      addLog('building your app with mistral vibe');
       startProgress();
+
       const source = new EventSource(`/api/generate/${encodeURIComponent(slug)}`);
 
       source.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-
-          if (data.type === 'done' || data.type === 'error') {
+          if (data.type === 'done') {
             source.close();
+            if (progressInterval) clearInterval(progressInterval);
+            progressBar.style.width = '100%';
+            // Step 3: show "done" for 1s then redirect
+            addLog('app ready!');
+            status.classList.add('done');
+            status.innerHTML = '<span>done — redirecting...</span>';
+            setTimeout(() => window.location.reload(), 1000);
+          } else if (data.type === 'error') {
+            source.close();
+            if (progressInterval) clearInterval(progressInterval);
+            progressBar.style.width = '0%';
+            progressBar.style.background = '#f87171';
+            status.classList.add('error');
+            status.innerHTML = `<span>${data.message || 'Generation failed'}</span>`;
           }
-
-          enqueue(data);
-        } catch {
-          // ignore parse errors
-        }
+        } catch {}
       };
 
       source.onerror = () => {
         source.close();
-        enqueue({ type: 'error', message: 'Connection lost. Refresh to retry.' });
+        if (progressInterval) clearInterval(progressInterval);
+        progressBar.style.width = '0%';
+        progressBar.style.background = '#f87171';
+        status.classList.add('error');
+        status.innerHTML = '<span>Connection lost. Refresh to retry.</span>';
       };
-    }, 1500);
+    }, 1000);
   </script>
 </body>
 </html>

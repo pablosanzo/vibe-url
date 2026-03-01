@@ -306,7 +306,7 @@ app.get('/', (req, res) => {
 
 // --- SSE endpoint for generation progress ---
 
-app.get('/api/generate/:slug', (req, res) => {
+app.get('/api/generate/:slug', async (req, res) => {
   const slug = sanitizeSlug(req.params.slug);
   if (!slug) {
     return res.status(400).json({ error: 'Invalid slug' });
@@ -354,9 +354,42 @@ app.get('/api/generate/:slug', (req, res) => {
   const constitution = fs.readFileSync(CONSTITUTION_FILE, 'utf-8');
   const buildData = loadData();
   const constitutionVersion = buildData.constitutionVersion || 1;
-  const fullPrompt = `${constitution}\n\n## User request\n${prompt}`;
 
   fs.mkdirSync(appDir, { recursive: true });
+
+  // Pre-research: check if this prompt needs real-world data, and fetch it
+  let researchSection = '';
+  if (mistral) {
+    try {
+      // Step 1: Does this need real-world data?
+      const check = await mistral.chat.complete({
+        model: 'mistral-small-latest',
+        messages: [{ role: 'user', content: `Would building a web app for "${prompt}" benefit from real-world data that might not be in your training data (e.g., current dates, scores, schedules, prices, recent events)? Reply with just YES or NO.` }],
+        temperature: 0,
+      });
+      const needsResearch = (check.choices[0].message.content || '').trim().toUpperCase().startsWith('YES');
+      console.log(`[build:${slug}] needs research: ${needsResearch}`);
+
+      if (needsResearch) {
+        // Step 2: Fetch real data via web search
+        const research = await mistral.chat.complete({
+          model: 'mistral-small-latest',
+          messages: [{ role: 'user', content: `I'm building a web app for: "${prompt}". Search the web and provide all the relevant real-world data I need (dates, names, facts, numbers, etc.) in a concise format. Just the facts, no commentary.` }],
+          tools: [{ type: 'web_search' }],
+          toolChoice: 'auto',
+        });
+        const researchData = (research.choices[0].message.content || '').trim();
+        if (researchData) {
+          researchSection = `\n\n## Research data (gathered from the web by the server)\nThe following real-world data was pre-fetched for accuracy. Use it to build the app:\n\n${researchData}`;
+          console.log(`[build:${slug}] research fetched: ${researchData.length} chars`);
+        }
+      }
+    } catch (err) {
+      console.log(`[build:${slug}] research failed (continuing without): ${err.message}`);
+    }
+  }
+
+  const fullPrompt = `${constitution}${researchSection}\n\n## User request\n${prompt}`;
 
   const promptFile = path.join(appDir, '.prompt.txt');
   fs.writeFileSync(promptFile, fullPrompt);
@@ -365,8 +398,8 @@ app.get('/api/generate/:slug', (req, res) => {
   const vibeProcess = spawn(vibePath, [
     '--agent', 'vibeurl',
     '--output', 'streaming',
-    '--max-turns', '15',
-    '--max-price', '1.00',
+    '--max-turns', '30',
+    '--max-price', '2.00',
     '-p', fullPrompt,
   ], {
     cwd: appDir,
@@ -390,6 +423,9 @@ app.get('/api/generate/:slug', (req, res) => {
   };
 
   let buffer = '';
+  let stderrBuffer = '';
+  let turnCount = 0;
+  let rawMessages = [];
 
   vibeProcess.stdout.on('data', (chunk) => {
     buffer += chunk.toString();
@@ -400,16 +436,12 @@ app.get('/api/generate/:slug', (req, res) => {
       if (!line.trim()) continue;
       try {
         const msg = JSON.parse(line);
+        rawMessages.push(msg);
+        if (msg.role === 'assistant') turnCount++;
         const logLine = extractLogMessage(msg);
-        if (logLine) {
-          logs.push(logLine);
-          broadcast({ type: 'log', message: logLine });
-        }
+        if (logLine) logs.push(logLine);
       } catch {
-        if (line.trim()) {
-          logs.push(line.trim());
-          broadcast({ type: 'log', message: line.trim() });
-        }
+        if (line.trim()) logs.push(line.trim());
       }
     }
   });
@@ -417,15 +449,24 @@ app.get('/api/generate/:slug', (req, res) => {
   vibeProcess.stderr.on('data', (chunk) => {
     const text = chunk.toString().trim();
     if (text) {
+      stderrBuffer += text + '\n';
       logs.push(text);
-      broadcast({ type: 'log', message: text });
     }
   });
 
   vibeProcess.on('close', (code) => {
     builds.delete(slug);
 
-    if (code === 0 && fs.existsSync(appFile)) {
+    // Log build outcome for debugging
+    const hasIndex = fs.existsSync(appFile);
+    const appFiles = fs.existsSync(appDir) ? fs.readdirSync(appDir).filter(f => !f.startsWith('.')) : [];
+    console.log(`[build:${slug}] exit=${code} turns=${turnCount} files=[${appFiles.join(',')}] hasIndex=${hasIndex}`);
+    if (code !== 0 || !hasIndex) {
+      console.log(`[build:${slug}] FAILED — stderr: ${stderrBuffer.trim().slice(-500)}`);
+      console.log(`[build:${slug}] last 3 messages:`, rawMessages.slice(-3).map(m => ({ role: m.role, tool_calls: m.tool_calls?.[0]?.function?.name, content: (m.content || '').slice(0, 200) })));
+    }
+
+    if (code === 0 && hasIndex) {
       // Record creation timestamp
       const data = loadData();
       if (!data.apps[slug]) data.apps[slug] = {};
@@ -437,7 +478,7 @@ app.get('/api/generate/:slug', (req, res) => {
       broadcast({ type: 'done', slug });
     } else {
       fs.rmSync(appDir, { recursive: true, force: true });
-      broadcast({ type: 'error', message: 'Generation failed. Try again.' });
+      broadcast({ type: 'error', message: `Generation failed (exit ${code}, ${turnCount} turns). Try again.` });
     }
 
     for (const client of clients) {
