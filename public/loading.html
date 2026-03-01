@@ -296,8 +296,7 @@
       terminal.scrollTop = terminal.scrollHeight;
     }
 
-    // Estimated progress bar (~60s typical generation with devstral-2)
-    const ESTIMATED_DURATION = 60000;
+    let estimatedDuration = 60000; // default, updated by server estimate
     let startTime = null;
     let progressInterval = null;
 
@@ -307,7 +306,7 @@
       progressBar.style.width = '0%';
       progressInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
-        const raw = elapsed / ESTIMATED_DURATION;
+        const raw = elapsed / estimatedDuration;
         const pct = Math.min(88, 90 * (1 - Math.exp(-2.5 * raw)));
         progressBar.style.width = pct + '%';
       }, 200);
@@ -324,7 +323,10 @@
       source.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'done') {
+          if (data.type === 'estimate') {
+            // Server sends average build time — recalibrate progress bar
+            estimatedDuration = data.duration * 1000;
+          } else if (data.type === 'done') {
             source.close();
             if (progressInterval) clearInterval(progressInterval);
             progressBar.style.width = '100%';

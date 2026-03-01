@@ -408,12 +408,19 @@ app.get('/api/generate/:slug', async (req, res) => {
   });
   vibeProcess.stdin.end();
 
+  const buildStartTime = Date.now();
   builds.set(slug, { process: vibeProcess, clients, logs });
 
-  // Let the client know we're connected and working
-  const startMsg = 'mistral vibe is generating your app';
-  logs.push(startMsg);
-  res.write(`data: ${JSON.stringify({ type: 'log', message: startMsg })}\n\n`);
+  // Calculate average build duration from past successful builds
+  const avgDuration = (() => {
+    const data = loadData();
+    const durations = Object.values(data.apps || {}).map(a => a.buildDuration).filter(Boolean);
+    if (durations.length === 0) return 60;
+    return Math.round(durations.reduce((s, d) => s + d, 0) / durations.length);
+  })();
+
+  // Send estimate to client so loading page can calibrate the progress bar
+  res.write(`data: ${JSON.stringify({ type: 'estimate', duration: avgDuration })}\n\n`);
 
   const broadcast = (data) => {
     const msg = `data: ${JSON.stringify(data)}\n\n`;
@@ -467,13 +474,15 @@ app.get('/api/generate/:slug', async (req, res) => {
     }
 
     if (code === 0 && hasIndex) {
-      // Record creation timestamp
+      const buildDuration = Math.round((Date.now() - buildStartTime) / 1000);
       const data = loadData();
       if (!data.apps[slug]) data.apps[slug] = {};
       data.apps[slug].createdAt = new Date().toISOString();
       data.apps[slug].visits = 0;
       data.apps[slug].constitutionVersion = constitutionVersion;
+      data.apps[slug].buildDuration = buildDuration;
       saveData(data);
+      console.log(`[build:${slug}] completed in ${buildDuration}s`);
 
       broadcast({ type: 'done', slug });
     } else {
