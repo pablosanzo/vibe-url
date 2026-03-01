@@ -301,6 +301,7 @@
     let progressInterval = null;
 
     function startProgress() {
+      if (progressInterval) clearInterval(progressInterval);
       startTime = Date.now();
       progressBar.classList.remove('indeterminate');
       progressBar.style.width = '0%';
@@ -315,15 +316,16 @@
     // Step 1: "connecting" is already in the HTML
     // Step 2: after 1s, connect SSE and follow phases
     setTimeout(() => {
-      startProgress();
-
       const source = new EventSource(`/api/generate/${encodeURIComponent(slug)}`);
 
       source.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'estimate') {
+            // Server sends estimate before each phase (research or build)
+            // Reset progress bar to track this phase's duration
             estimatedDuration = data.duration * 1000;
+            startProgress();
           } else if (data.type === 'phase') {
             if (data.phase === 'researching') {
               addLog('researching with mistral');
@@ -336,7 +338,6 @@
             source.close();
             if (progressInterval) clearInterval(progressInterval);
             progressBar.style.width = '100%';
-            // Step 3: show "done" for 1s then redirect
             addLog('app ready!');
             status.classList.add('done');
             status.innerHTML = '<span>done — redirecting...</span>';

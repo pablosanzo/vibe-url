@@ -359,6 +359,7 @@ app.get('/api/generate/:slug', async (req, res) => {
 
   // Pre-research: check if this prompt needs real-world data, and fetch it
   let researchSection = '';
+  let researchDuration = null;
   if (mistral) {
     try {
       // Step 1: Does this need real-world data?
@@ -371,10 +372,21 @@ app.get('/api/generate/:slug', async (req, res) => {
       console.log(`[build:${slug}] needs research: ${needsResearch}`);
 
       if (needsResearch) {
-        // Tell the client we're researching
+        // Calculate average research duration from past builds
+        const avgResearch = (() => {
+          const d = loadData();
+          const durations = Object.values(d.apps || {}).map(a => a.researchDuration).filter(Boolean);
+          if (durations.length === 0) return 15;
+          return Math.round(durations.reduce((s, v) => s + v, 0) / durations.length);
+        })();
+
+        // Tell the client we're researching + send estimate
         for (const c of clients) {
           c.write(`data: ${JSON.stringify({ type: 'phase', phase: 'researching' })}\n\n`);
+          c.write(`data: ${JSON.stringify({ type: 'estimate', duration: avgResearch })}\n\n`);
         }
+
+        const researchStart = Date.now();
 
         // Step 2: Create a web search agent, fetch data, then clean up
         const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': `Bearer ${mistralKey}` };
@@ -391,6 +403,8 @@ app.get('/api/generate/:slug', async (req, res) => {
         });
         const conv = await convRes.json();
 
+        researchDuration = Math.round((Date.now() - researchStart) / 1000);
+
         const researchData = (conv.outputs || [])
           .filter(o => o.type === 'message.output')
           .flatMap(o => (o.content || []).filter(c => c.type === 'text').map(c => c.text))
@@ -402,7 +416,7 @@ app.get('/api/generate/:slug', async (req, res) => {
 
         if (researchData) {
           researchSection = `\n\n## Research data (gathered from the web by the server)\nThe following real-world data was pre-fetched for accuracy. Use it to build the app:\n\n${researchData}`;
-          console.log(`[build:${slug}] research fetched: ${researchData.length} chars`);
+          console.log(`[build:${slug}] research fetched: ${researchData.length} chars in ${researchDuration}s`);
         }
       }
     } catch (err) {
@@ -415,9 +429,18 @@ app.get('/api/generate/:slug', async (req, res) => {
   const promptFile = path.join(appDir, '.prompt.txt');
   fs.writeFileSync(promptFile, fullPrompt);
 
-  // Tell client we're now building
+  // Calculate average build duration from past successful builds
+  const avgDuration = (() => {
+    const data = loadData();
+    const durations = Object.values(data.apps || {}).map(a => a.buildDuration).filter(Boolean);
+    if (durations.length === 0) return 60;
+    return Math.round(durations.reduce((s, d) => s + d, 0) / durations.length);
+  })();
+
+  // Tell client we're now building + send estimate so progress bar starts here (after research)
   const broadcast0 = (data) => { for (const c of clients) c.write(`data: ${JSON.stringify(data)}\n\n`); };
   broadcast0({ type: 'phase', phase: 'building' });
+  broadcast0({ type: 'estimate', duration: avgDuration });
 
   const vibePath = require('child_process').execSync('which vibe').toString().trim();
   const vibeProcess = spawn(vibePath, [
@@ -435,17 +458,6 @@ app.get('/api/generate/:slug', async (req, res) => {
 
   const buildStartTime = Date.now();
   builds.set(slug, { process: vibeProcess, clients, logs });
-
-  // Calculate average build duration from past successful builds
-  const avgDuration = (() => {
-    const data = loadData();
-    const durations = Object.values(data.apps || {}).map(a => a.buildDuration).filter(Boolean);
-    if (durations.length === 0) return 60;
-    return Math.round(durations.reduce((s, d) => s + d, 0) / durations.length);
-  })();
-
-  // Send estimate to client so loading page can calibrate the progress bar
-  res.write(`data: ${JSON.stringify({ type: 'estimate', duration: avgDuration })}\n\n`);
 
   const broadcast = (data) => {
     const msg = `data: ${JSON.stringify(data)}\n\n`;
@@ -492,25 +504,59 @@ app.get('/api/generate/:slug', async (req, res) => {
     // Log build outcome for debugging
     const hasIndex = fs.existsSync(appFile);
     const appFiles = fs.existsSync(appDir) ? fs.readdirSync(appDir).filter(f => !f.startsWith('.')) : [];
+    const buildDuration = Math.round((Date.now() - buildStartTime) / 1000);
     console.log(`[build:${slug}] exit=${code} turns=${turnCount} files=[${appFiles.join(',')}] hasIndex=${hasIndex}`);
     if (code !== 0 || !hasIndex) {
       console.log(`[build:${slug}] FAILED — stderr: ${stderrBuffer.trim().slice(-500)}`);
       console.log(`[build:${slug}] last 3 messages:`, rawMessages.slice(-3).map(m => ({ role: m.role, tool_calls: m.tool_calls?.[0]?.function?.name, content: (m.content || '').slice(0, 200) })));
     }
 
+    // Save build log to .build.log (hidden file, not served to users)
+    try {
+      const buildLog = [
+        `Build log for: ${slug}`,
+        `Date: ${new Date().toISOString()}`,
+        `Exit code: ${code}`,
+        `Turns: ${turnCount}`,
+        `Build duration: ${buildDuration}s`,
+        `Research duration: ${researchDuration ? researchDuration + 's' : 'n/a'}`,
+        `Files: ${appFiles.join(', ') || 'none'}`,
+        `Constitution version: ${constitutionVersion}`,
+        `Research: ${researchSection ? researchSection.length + ' chars' : 'none'}`,
+        '',
+        '=== PROMPT ===',
+        fullPrompt,
+        '',
+        '=== STDERR ===',
+        stderrBuffer.trim() || '(empty)',
+        '',
+        '=== RAW MESSAGES ===',
+        ...rawMessages.map(m => JSON.stringify(m)),
+      ].join('\n');
+      fs.writeFileSync(path.join(appDir, '.build.log'), buildLog);
+    } catch (e) {
+      console.log(`[build:${slug}] failed to write build log: ${e.message}`);
+    }
+
     if (code === 0 && hasIndex) {
-      const buildDuration = Math.round((Date.now() - buildStartTime) / 1000);
       const data = loadData();
       if (!data.apps[slug]) data.apps[slug] = {};
       data.apps[slug].createdAt = new Date().toISOString();
       data.apps[slug].visits = 0;
       data.apps[slug].constitutionVersion = constitutionVersion;
       data.apps[slug].buildDuration = buildDuration;
+      if (researchDuration) data.apps[slug].researchDuration = researchDuration;
       saveData(data);
       console.log(`[build:${slug}] completed in ${buildDuration}s`);
 
       broadcast({ type: 'done', slug });
     } else {
+      // Keep the build log even on failure — move it before deleting the dir
+      const failLogPath = path.join(appDir, '.build.log');
+      const failLogDest = path.join(APPS_DIR, `.failed-${slug}-${Date.now()}.log`);
+      if (fs.existsSync(failLogPath)) {
+        try { fs.renameSync(failLogPath, failLogDest); } catch {}
+      }
       fs.rmSync(appDir, { recursive: true, force: true });
       broadcast({ type: 'error', message: `Generation failed (exit ${code}, ${turnCount} turns). Try again.` });
     }
@@ -560,6 +606,11 @@ app.get('/:slug/{*filepath}', (req, res) => {
   const segments = Array.isArray(req.params.filepath) ? req.params.filepath : [req.params.filepath];
   const subPath = segments.join('/');
   if (!subPath) return res.status(404).send('Not found');
+
+  // Block hidden/dotfiles (e.g. .build.log, .prompt.txt)
+  if (segments.some(s => s.startsWith('.'))) {
+    return res.status(404).send('Not found');
+  }
 
   // Prevent directory traversal
   const resolved = path.resolve(path.join(APPS_DIR, slug, subPath));
