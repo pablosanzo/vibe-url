@@ -509,53 +509,58 @@ function brandingBar(slug) {
   const improveUrl = `/?improve=${encodeURIComponent(slug)}`;
 
   return `
-<div id="vibe-bar" style="
-  position:fixed;top:12px;left:12px;z-index:99999;
-  font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif;font-size:13px;
-  display:flex;align-items:center;gap:6px;
-  background:rgba(10,10,11,0.92);backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,0.08);border-radius:40px;
-  padding:6px 6px 6px 16px;color:#e8e8ed;
-  box-shadow:0 4px 24px rgba(0,0,0,0.4);
-  animation:vibe-slide-up 0.4s ease;
-">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap');
-    @keyframes vibe-slide-up{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-    #vibe-bar a,#vibe-bar button{font-family:inherit;font-size:12px;font-weight:500;text-decoration:none;cursor:pointer}
-    #vibe-bar .vb-btn{display:flex;align-items:center;gap:5px;border:none;border-radius:32px;padding:7px 14px;transition:all 0.15s}
-    #vibe-bar .vb-share{background:#ff6b2b;color:#fff;position:relative}
-    #vibe-bar .vb-share:hover{opacity:0.9}
-    #vibe-bar .vb-improve{background:transparent;color:#6b6b76}
-    #vibe-bar .vb-improve:hover{color:#e8e8ed;background:rgba(255,255,255,0.06)}
-    #vibe-bar .vb-logo{font-weight:700;font-size:15px;color:#e8e8ed;margin-right:6px;text-decoration:none;position:relative}
-    #vibe-bar .vb-logo span{color:#ff6b2b}
-    #vibe-bar .vb-tooltip{
-      position:absolute;top:calc(100% + 10px);left:0;
-      background:rgba(17,17,19,0.96);backdrop-filter:blur(12px);
-      border:1px solid rgba(255,255,255,0.08);border-radius:8px;
-      padding:8px 12px;white-space:nowrap;
-      font-size:11px;font-weight:500;color:#a1a1aa;
-      box-shadow:0 8px 24px rgba(0,0,0,0.5);
-      opacity:0;pointer-events:none;transform:translateY(-4px);
-      transition:opacity 0.15s,transform 0.15s;
-    }
-    #vibe-bar .vb-logo:hover .vb-tooltip{opacity:1;transform:translateY(0)}
-    #vibe-bar .vb-dropdown{
-      display:none;position:absolute;top:calc(100% + 8px);right:0;
-      background:rgba(17,17,19,0.96);backdrop-filter:blur(12px);
-      border:1px solid rgba(255,255,255,0.08);border-radius:10px;
-      padding:4px;min-width:180px;
-      box-shadow:0 8px 32px rgba(0,0,0,0.5);
-    }
-    #vibe-bar .vb-dropdown.open{display:block}
-    #vibe-bar .vb-dropdown a{
-      display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:7px;
-      color:#e8e8ed;font-size:12px;font-weight:500;white-space:nowrap;
-    }
-    #vibe-bar .vb-dropdown a:hover{background:rgba(255,255,255,0.06)}
-    #vibe-bar .vb-dropdown .vb-dim{color:#6b6b76}
-  </style>
+<style id="vibe-bar-styles">
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap');
+  @keyframes vibe-slide-up{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+  #vibe-bar,#vibe-bar *{all:initial;box-sizing:border-box}
+  #vibe-bar{
+    position:fixed!important;top:12px!important;left:12px!important;z-index:99999!important;
+    font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif!important;font-size:13px!important;
+    line-height:normal!important;letter-spacing:normal!important;text-transform:none!important;
+    display:flex!important;align-items:center!important;gap:6px!important;
+    background:rgba(10,10,11,0.92)!important;backdrop-filter:blur(12px)!important;
+    border:1px solid rgba(255,255,255,0.08)!important;border-radius:40px!important;
+    padding:6px 6px 6px 16px!important;color:#e8e8ed!important;
+    box-shadow:0 4px 24px rgba(0,0,0,0.4)!important;
+    animation:vibe-slide-up 0.4s ease!important;
+  }
+  #vibe-bar a,#vibe-bar button{font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif!important;font-size:12px!important;font-weight:500!important;text-decoration:none!important;cursor:pointer!important;line-height:normal!important;letter-spacing:normal!important;color:inherit!important}
+  #vibe-bar .vb-btn{display:flex!important;align-items:center!important;gap:5px!important;border:none!important;border-radius:32px!important;padding:7px 14px!important;transition:all 0.15s!important}
+  #vibe-bar .vb-share{background:#ff6b2b!important;color:#fff!important;position:relative!important}
+  #vibe-bar .vb-share:hover{opacity:0.9!important}
+  #vibe-bar .vb-improve{background:transparent!important;color:#6b6b76!important}
+  #vibe-bar .vb-improve:hover{color:#e8e8ed!important;background:rgba(255,255,255,0.06)!important}
+  #vibe-bar .vb-logo{font-weight:700!important;font-size:15px!important;color:#e8e8ed!important;margin-right:6px!important;text-decoration:none!important;position:relative!important;white-space:nowrap!important}
+  #vibe-bar .vb-logo span{color:#ff6b2b!important}
+  #vibe-bar .vb-tooltip{
+    all:initial!important;font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif!important;
+    position:absolute!important;top:calc(100% + 10px)!important;left:0!important;
+    background:rgba(17,17,19,0.96)!important;backdrop-filter:blur(12px)!important;
+    border:1px solid rgba(255,255,255,0.08)!important;border-radius:8px!important;
+    padding:8px 12px!important;white-space:nowrap!important;
+    font-size:11px!important;font-weight:500!important;color:#a1a1aa!important;
+    box-shadow:0 8px 24px rgba(0,0,0,0.5)!important;
+    opacity:0!important;pointer-events:none!important;transform:translateY(-4px)!important;
+    transition:opacity 0.15s,transform 0.15s!important;
+  }
+  #vibe-bar .vb-logo:hover .vb-tooltip{opacity:1!important;transform:translateY(0)!important}
+  #vibe-bar .vb-dropdown{
+    all:initial!important;font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif!important;
+    display:none!important;position:absolute!important;top:calc(100% + 8px)!important;right:0!important;
+    background:rgba(17,17,19,0.96)!important;backdrop-filter:blur(12px)!important;
+    border:1px solid rgba(255,255,255,0.08)!important;border-radius:10px!important;
+    padding:4px!important;min-width:180px!important;
+    box-shadow:0 8px 32px rgba(0,0,0,0.5)!important;
+  }
+  #vibe-bar .vb-dropdown.open{display:block!important}
+  #vibe-bar .vb-dropdown a{
+    display:flex!important;align-items:center!important;gap:8px!important;padding:8px 12px!important;border-radius:7px!important;
+    color:#e8e8ed!important;font-size:12px!important;font-weight:500!important;white-space:nowrap!important;
+  }
+  #vibe-bar .vb-dropdown a:hover{background:rgba(255,255,255,0.06)!important}
+  #vibe-bar .vb-dropdown .vb-dim{color:#6b6b76!important}
+</style>
+<div id="vibe-bar">
   <a class="vb-logo" href="https://vibe-url.com">vibe<span>-</span>url<span class="vb-tooltip">Type any app idea in the URL, get it built instantly</span></a>
   <a class="vb-btn vb-improve" href="${improveUrl}">improve</a>
   <button class="vb-btn vb-share" onclick="document.getElementById('vibe-dd').classList.toggle('open')" type="button">
