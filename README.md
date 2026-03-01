@@ -16,7 +16,7 @@ Built for the [Mistral Worldwide Hackathon](https://hackiterate.com/mistral-worl
 
 3. **Watch it build.** A loading screen connects over Server-Sent Events (SSE). A progress bar tracks the estimated build time (calibrated from averages of past builds). A live terminal shows what the Vibe agent is doing: researching data, writing files, setting up the app.
 
-4. **Use your app.** When the build finishes, the page reloads and you're looking at a fully functional web app. A small branding bar in the corner lets you share it on X or WhatsApp, copy the link, or hit "improve" to go back and try a different slug.
+4. **Use your app.** When the build finishes, the page reloads and you're looking at a fully functional web app -- complete with its own custom favicon. A small branding bar in the corner lets you share it on X or WhatsApp, copy the link, or hit "improve" to go back and try a different slug.
 
 5. **Come back anytime.** Every app lives permanently at its URL. Second visit is instant -- it's cached on disk. Anyone with the link can use it.
 
@@ -32,7 +32,7 @@ vibe-url is built on four distinct Mistral integrations that work together in a 
 
 The heart of the project. When a user requests an app, the server spawns [Mistral Vibe](https://mistral.ai/products/vibe) as a subprocess using a custom agent (`vibeurl`) running the `devstral-small` model. The agent receives a carefully constructed prompt that combines:
 
-- A **constitution** -- a versioned set of rules and principles that govern every generated app (role definition, leadership principles, technical constraints, content safety guidelines)
+- A **constitution** -- a versioned set of rules and principles that govern every generated app (role definition, leadership principles, technical constraints, content safety guidelines, favicon generation)
 - A **design guide** -- opinionated frontend design standards that push for bold, distinctive UIs (mandates unique Google Fonts, custom color palettes, CSS animations; explicitly bans generic AI aesthetics)
 - **Research data** -- real-world facts gathered by the web search agent (see below), if the prompt needs them
 - The **user's request** -- derived from the slug they typed
