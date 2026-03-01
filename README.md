@@ -26,6 +26,8 @@ The whole thing works without accounts, API keys, or configuration of any kind. 
 
 ## How it uses Mistral
 
+![Architecture diagram showing the vibe-url pipeline](docs/architecture-diagram.png)
+
 vibe-url is built on four distinct Mistral integrations that work together in a pipeline:
 
 ### 1. Mistral Vibe CLI -- App Generation (core)
