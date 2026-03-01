@@ -294,7 +294,7 @@ app.get('/api/constitution-summary', (req, res) => {
 app.get('/api/showcase', (req, res) => {
   const data = loadData();
   const projects = Object.entries(data.apps || {})
-    .filter(([, app]) => app.showcaseSafe === true)
+    .filter(([slug, app]) => app.showcaseSafe === true && fs.existsSync(path.join(APPS_DIR, slug, 'index.html')))
     .sort((a, b) => (b[1].createdAt || '').localeCompare(a[1].createdAt || ''))
     .slice(0, 20)
     .map(([slug, app]) => ({ slug, createdAt: app.createdAt, visits: app.visits || 0 }));
@@ -452,21 +452,7 @@ app.get('/api/generate/:slug', async (req, res) => {
   broadcast0({ type: 'estimate', duration: avgDuration });
 
   const vibePath = require('child_process').execSync('which vibe').toString().trim();
-  const vibeProcess = spawn(vibePath, [
-    '--agent', 'vibeurl',
-    '--output', 'streaming',
-    '--max-turns', '30',
-    '--max-price', '2.00',
-    '-p', fullPrompt,
-  ], {
-    cwd: appDir,
-    env: { ...process.env, PYTHONUNBUFFERED: '1' },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  vibeProcess.stdin.end();
-
   const buildStartTime = Date.now();
-  builds.set(slug, { process: vibeProcess, clients, logs });
 
   const broadcast = (data) => {
     const msg = `data: ${JSON.stringify(data)}\n\n`;
@@ -475,108 +461,153 @@ app.get('/api/generate/:slug', async (req, res) => {
     }
   };
 
-  let buffer = '';
-  let stderrBuffer = '';
-  let turnCount = 0;
-  let rawMessages = [];
+  const MAX_ATTEMPTS = 3;
+  let attempt = 0;
 
-  vibeProcess.stdout.on('data', (chunk) => {
-    buffer += chunk.toString();
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
+  function startBuild() {
+    attempt++;
+    // Clean app dir for retry (keep .prompt.txt)
+    if (attempt > 1) {
+      const existing = fs.existsSync(appDir) ? fs.readdirSync(appDir) : [];
+      for (const f of existing) {
+        if (f === '.prompt.txt') continue;
+        const p = path.join(appDir, f);
+        fs.rmSync(p, { recursive: true, force: true });
+      }
+    }
+    fs.mkdirSync(appDir, { recursive: true });
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    const vibeProcess = spawn(vibePath, [
+      '--agent', 'vibeurl',
+      '--output', 'streaming',
+      '--max-turns', '30',
+      '--max-price', '2.00',
+      '-p', fullPrompt,
+    ], {
+      cwd: appDir,
+      env: { ...process.env, PYTHONUNBUFFERED: '1' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    vibeProcess.stdin.end();
+
+    builds.set(slug, { process: vibeProcess, clients, logs });
+
+    let buffer = '';
+    let stderrBuffer = '';
+    let turnCount = 0;
+    let rawMessages = [];
+
+    vibeProcess.stdout.on('data', (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          rawMessages.push(msg);
+          if (msg.role === 'assistant') turnCount++;
+          const logLine = extractLogMessage(msg);
+          if (logLine) logs.push(logLine);
+        } catch {
+          if (line.trim()) logs.push(line.trim());
+        }
+      }
+    });
+
+    vibeProcess.stderr.on('data', (chunk) => {
+      const text = chunk.toString().trim();
+      if (text) {
+        stderrBuffer += text + '\n';
+        logs.push(text);
+      }
+    });
+
+    vibeProcess.on('close', (code) => {
+      const hasIndex = fs.existsSync(appFile);
+      const appFiles = fs.existsSync(appDir) ? fs.readdirSync(appDir).filter(f => !f.startsWith('.')) : [];
+      const buildDuration = Math.round((Date.now() - buildStartTime) / 1000);
+      console.log(`[build:${slug}] attempt=${attempt} exit=${code} turns=${turnCount} files=[${appFiles.join(',')}] hasIndex=${hasIndex}`);
+
+      if (code !== 0 || !hasIndex) {
+        console.log(`[build:${slug}] FAILED — stderr: ${stderrBuffer.trim().slice(-500)}`);
+        console.log(`[build:${slug}] last 3 messages:`, rawMessages.slice(-3).map(m => ({ role: m.role, tool_calls: m.tool_calls?.[0]?.function?.name, content: (m.content || '').slice(0, 200) })));
+
+        // Retry on "1-turn no-files" pattern (model didn't generate code)
+        const isRetriable = turnCount <= 2 && appFiles.length === 0;
+        if (isRetriable && attempt < MAX_ATTEMPTS) {
+          console.log(`[build:${slug}] retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+          logs.push(`retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS})...`);
+          startBuild();
+          return;
+        }
+      }
+
+      // Save build log
       try {
-        const msg = JSON.parse(line);
-        rawMessages.push(msg);
-        if (msg.role === 'assistant') turnCount++;
-        const logLine = extractLogMessage(msg);
-        if (logLine) logs.push(logLine);
-      } catch {
-        if (line.trim()) logs.push(line.trim());
+        const buildLog = [
+          `Build log for: ${slug}`,
+          `Date: ${new Date().toISOString()}`,
+          `Exit code: ${code}`,
+          `Turns: ${turnCount}`,
+          `Attempts: ${attempt}/${MAX_ATTEMPTS}`,
+          `Build duration: ${buildDuration}s`,
+          `Research duration: ${researchDuration ? researchDuration + 's' : 'n/a'}`,
+          `Files: ${appFiles.join(', ') || 'none'}`,
+          `Constitution version: ${constitutionVersion}`,
+          `Research: ${researchSection ? researchSection.length + ' chars' : 'none'}`,
+          '',
+          '=== PROMPT ===',
+          fullPrompt,
+          '',
+          '=== STDERR ===',
+          stderrBuffer.trim() || '(empty)',
+          '',
+          '=== RAW MESSAGES ===',
+          ...rawMessages.map(m => JSON.stringify(m)),
+        ].join('\n');
+        fs.writeFileSync(path.join(appDir, '.build.log'), buildLog);
+      } catch (e) {
+        console.log(`[build:${slug}] failed to write build log: ${e.message}`);
       }
-    }
-  });
 
-  vibeProcess.stderr.on('data', (chunk) => {
-    const text = chunk.toString().trim();
-    if (text) {
-      stderrBuffer += text + '\n';
-      logs.push(text);
-    }
-  });
+      builds.delete(slug);
 
-  vibeProcess.on('close', (code) => {
-    builds.delete(slug);
+      if (code === 0 && hasIndex) {
+        const data = loadData();
+        if (!data.apps[slug]) data.apps[slug] = {};
+        data.apps[slug].createdAt = new Date().toISOString();
+        data.apps[slug].visits = 0;
+        data.apps[slug].constitutionVersion = constitutionVersion;
+        data.apps[slug].buildDuration = buildDuration;
+        data.apps[slug].buildAttempts = attempt;
+        if (researchDuration) data.apps[slug].researchDuration = researchDuration;
+        saveData(data);
+        console.log(`[build:${slug}] completed in ${buildDuration}s (attempt ${attempt})`);
 
-    // Log build outcome for debugging
-    const hasIndex = fs.existsSync(appFile);
-    const appFiles = fs.existsSync(appDir) ? fs.readdirSync(appDir).filter(f => !f.startsWith('.')) : [];
-    const buildDuration = Math.round((Date.now() - buildStartTime) / 1000);
-    console.log(`[build:${slug}] exit=${code} turns=${turnCount} files=[${appFiles.join(',')}] hasIndex=${hasIndex}`);
-    if (code !== 0 || !hasIndex) {
-      console.log(`[build:${slug}] FAILED — stderr: ${stderrBuffer.trim().slice(-500)}`);
-      console.log(`[build:${slug}] last 3 messages:`, rawMessages.slice(-3).map(m => ({ role: m.role, tool_calls: m.tool_calls?.[0]?.function?.name, content: (m.content || '').slice(0, 200) })));
-    }
+        // Ensure moderation result is saved (already running in parallel since build start)
+        moderationPromise.then(() => {}).catch(() => {});
 
-    // Save build log to .build.log (hidden file, not served to users)
-    try {
-      const buildLog = [
-        `Build log for: ${slug}`,
-        `Date: ${new Date().toISOString()}`,
-        `Exit code: ${code}`,
-        `Turns: ${turnCount}`,
-        `Build duration: ${buildDuration}s`,
-        `Research duration: ${researchDuration ? researchDuration + 's' : 'n/a'}`,
-        `Files: ${appFiles.join(', ') || 'none'}`,
-        `Constitution version: ${constitutionVersion}`,
-        `Research: ${researchSection ? researchSection.length + ' chars' : 'none'}`,
-        '',
-        '=== PROMPT ===',
-        fullPrompt,
-        '',
-        '=== STDERR ===',
-        stderrBuffer.trim() || '(empty)',
-        '',
-        '=== RAW MESSAGES ===',
-        ...rawMessages.map(m => JSON.stringify(m)),
-      ].join('\n');
-      fs.writeFileSync(path.join(appDir, '.build.log'), buildLog);
-    } catch (e) {
-      console.log(`[build:${slug}] failed to write build log: ${e.message}`);
-    }
-
-    if (code === 0 && hasIndex) {
-      const data = loadData();
-      if (!data.apps[slug]) data.apps[slug] = {};
-      data.apps[slug].createdAt = new Date().toISOString();
-      data.apps[slug].visits = 0;
-      data.apps[slug].constitutionVersion = constitutionVersion;
-      data.apps[slug].buildDuration = buildDuration;
-      if (researchDuration) data.apps[slug].researchDuration = researchDuration;
-      saveData(data);
-      console.log(`[build:${slug}] completed in ${buildDuration}s`);
-
-      // Ensure moderation result is saved (already running in parallel since build start)
-      moderationPromise.then(() => {}).catch(() => {});
-
-      broadcast({ type: 'done', slug });
-    } else {
-      // Keep the build log even on failure — move it before deleting the dir
-      const failLogPath = path.join(appDir, '.build.log');
-      const failLogDest = path.join(APPS_DIR, `.failed-${slug}-${Date.now()}.log`);
-      if (fs.existsSync(failLogPath)) {
-        try { fs.renameSync(failLogPath, failLogDest); } catch {}
+        broadcast({ type: 'done', slug });
+      } else {
+        // Keep the build log even on failure — move it before deleting the dir
+        const failLogPath = path.join(appDir, '.build.log');
+        const failLogDest = path.join(APPS_DIR, `.failed-${slug}-${Date.now()}.log`);
+        if (fs.existsSync(failLogPath)) {
+          try { fs.renameSync(failLogPath, failLogDest); } catch {}
+        }
+        fs.rmSync(appDir, { recursive: true, force: true });
+        broadcast({ type: 'error', message: `Generation failed after ${attempt} attempt${attempt > 1 ? 's' : ''} (exit ${code}, ${turnCount} turns). Try again.` });
       }
-      fs.rmSync(appDir, { recursive: true, force: true });
-      broadcast({ type: 'error', message: `Generation failed (exit ${code}, ${turnCount} turns). Try again.` });
-    }
 
-    for (const client of clients) {
-      client.end();
-    }
-  });
+      for (const client of clients) {
+        client.end();
+      }
+    });
+  }
+
+  startBuild();
 });
 
 // --- Serve generated apps or loading page ---
