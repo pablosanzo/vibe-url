@@ -313,9 +313,8 @@
     }
 
     // Step 1: "connecting" is already in the HTML
-    // Step 2: after 1s, show "building" and connect SSE
+    // Step 2: after 1s, connect SSE and follow phases
     setTimeout(() => {
-      addLog('building your app with mistral vibe');
       startProgress();
 
       const source = new EventSource(`/api/generate/${encodeURIComponent(slug)}`);
@@ -324,8 +323,15 @@
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'estimate') {
-            // Server sends average build time — recalibrate progress bar
             estimatedDuration = data.duration * 1000;
+          } else if (data.type === 'phase') {
+            if (data.phase === 'researching') {
+              addLog('researching with mistral');
+              status.innerHTML = '<div class="spinner"></div><span>researching real-world data</span>';
+            } else if (data.phase === 'building') {
+              addLog('building your app with mistral vibe');
+              status.innerHTML = '<div class="spinner"></div><span>generating your app</span>';
+            }
           } else if (data.type === 'done') {
             source.close();
             if (progressInterval) clearInterval(progressInterval);

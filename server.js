@@ -371,14 +371,35 @@ app.get('/api/generate/:slug', async (req, res) => {
       console.log(`[build:${slug}] needs research: ${needsResearch}`);
 
       if (needsResearch) {
-        // Step 2: Fetch real data via web search
-        const research = await mistral.chat.complete({
-          model: 'mistral-small-latest',
-          messages: [{ role: 'user', content: `I'm building a web app for: "${prompt}". Search the web and provide all the relevant real-world data I need (dates, names, facts, numbers, etc.) in a concise format. Just the facts, no commentary.` }],
-          tools: [{ type: 'web_search' }],
-          toolChoice: 'auto',
+        // Tell the client we're researching
+        for (const c of clients) {
+          c.write(`data: ${JSON.stringify({ type: 'phase', phase: 'researching' })}\n\n`);
+        }
+
+        // Step 2: Create a web search agent, fetch data, then clean up
+        const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': `Bearer ${mistralKey}` };
+
+        const agentRes = await fetch('https://api.mistral.ai/v1/agents', {
+          method: 'POST', headers,
+          body: JSON.stringify({ model: 'mistral-small-latest', name: 'vibe-url-researcher', tools: [{ type: 'web_search' }] }),
         });
-        const researchData = (research.choices[0].message.content || '').trim();
+        const agent = await agentRes.json();
+
+        const convRes = await fetch('https://api.mistral.ai/v1/conversations', {
+          method: 'POST', headers,
+          body: JSON.stringify({ agent_id: agent.id, stream: false, inputs: `I'm building a web app for: "${prompt}". Search the web and provide all the relevant real-world data I need (dates, names, facts, numbers, etc.) in a concise format. Just the facts, no commentary.` }),
+        });
+        const conv = await convRes.json();
+
+        const researchData = (conv.outputs || [])
+          .filter(o => o.type === 'message.output')
+          .flatMap(o => (o.content || []).filter(c => c.type === 'text').map(c => c.text))
+          .join('\n')
+          .trim();
+
+        // Clean up agent
+        fetch(`https://api.mistral.ai/v1/agents/${agent.id}`, { method: 'DELETE', headers }).catch(() => {});
+
         if (researchData) {
           researchSection = `\n\n## Research data (gathered from the web by the server)\nThe following real-world data was pre-fetched for accuracy. Use it to build the app:\n\n${researchData}`;
           console.log(`[build:${slug}] research fetched: ${researchData.length} chars`);
@@ -393,6 +414,10 @@ app.get('/api/generate/:slug', async (req, res) => {
 
   const promptFile = path.join(appDir, '.prompt.txt');
   fs.writeFileSync(promptFile, fullPrompt);
+
+  // Tell client we're now building
+  const broadcast0 = (data) => { for (const c of clients) c.write(`data: ${JSON.stringify(data)}\n\n`); };
+  broadcast0({ type: 'phase', phase: 'building' });
 
   const vibePath = require('child_process').execSync('which vibe').toString().trim();
   const vibeProcess = spawn(vibePath, [
